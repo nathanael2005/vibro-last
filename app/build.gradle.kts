@@ -22,15 +22,14 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      val kFile = file(keystorePath)
+      val kFile = file("${rootDir}/app/release.jks")
       if (kFile.exists()) {
         storeFile = kFile
-        storePassword = System.getenv("STORE_PASSWORD") ?: "android"
-        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-        keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+        storePassword = "vibropass"
+        keyAlias = "vibrokey"
+        keyPassword = "vibropass"
       } else {
-        // Graceful fallback to debug keystore if release is not available
+        // Fallback to debug if release key is missing
         storeFile = file("${rootDir}/debug.keystore")
         storePassword = "android"
         keyAlias = "androiddebugkey"
