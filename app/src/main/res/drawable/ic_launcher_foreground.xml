@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/marketplace_logo_asset_1784370139675"
+        android:drawable="@drawable/vibro_icon_logo_1784376215985"
         android:gravity="center" />
 </layer-list>

@@ -13,6 +13,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -66,6 +69,82 @@ const val MAIN_SHELL_ROUTE = "main"
 const val PRODUCT_DETAIL_ROUTE = "product/{productId}"
 fun createProductDetailRoute(id: String) = "product/$id"
 
+// --- Location Models ---
+data class CityLocation(
+    val name: String,
+    val subLocations: List<String>
+)
+
+val ethiopianCities = listOf(
+    CityLocation("Addis Ababa", listOf(
+        "Bole", "Yeka", "Kirkos", "Lideta", "Arada", "Gullele", 
+        "Kolfe Keranio", "Nifas Silk-Lafto", "Akaki Kality", "Lemi Kura"
+    )),
+    CityLocation("Hawassa", listOf(
+        "Tabor", "Misrak", "Hayipha", "Millennium", "Lewi", "Amora Gedel", "Bahel Adarash", "Hawassa Lake"
+    )),
+    CityLocation("Adama", listOf(
+        "Bole", "Kebele 01", "Geda", "Melka Adama", "Franco"
+    )),
+    CityLocation("Bahir Dar", listOf(
+        "Kebele 3", "Kebele 4", "Bezawit", "Ginbot 20", "Shimbit", "Tana", "Abay"
+    )),
+    CityLocation("Dessie", listOf(
+        "Kebele 1", "Kebele 2", "Segno Gebeya", "Hotie", "Menen", "Robit", "Arab Ganda"
+    )),
+    CityLocation("Jimma", listOf(
+        "Ginjo", "Hermata", "Kochi", "Mendera", "Jiren", "Seto Semero"
+    )),
+    CityLocation("Mekelle", listOf(
+        "Adi Haki", "Kedamay Weyane", "Ayder", "Hadnet", "Hawelti", "Semien"
+    )),
+    CityLocation("Gondar", listOf(
+        "Arada", "Azezo", "Piazza", "Kebele 18", "Maraki", "Wolleka"
+    )),
+    CityLocation("Dire Dawa", listOf(
+        "Kebele 01", "Kebele 02", "Sabian", "Depo", "Shinile"
+    )),
+    CityLocation("Harar", listOf(
+        "Jegol", "Kebele 01", "Kebele 02", "Dakar", "Aboker"
+    )),
+    CityLocation("Jijiga", listOf(
+        "Kebele 01", "Kebele 02", "Kebele 03"
+    )),
+    CityLocation("Arba Minch", listOf(
+        "Sikela", "Secha", "Limat"
+    )),
+    CityLocation("Hosaena", listOf(
+        "Kebele 01", "Kebele 02", "Lichamba"
+    )),
+    CityLocation("Dilla", listOf(
+        "Kebele 01", "Kebele 02", "Haroresa"
+    )),
+    CityLocation("Nekemte", listOf(
+        "Kebele 01", "Kebele 02"
+    )),
+    CityLocation("Debre Birhan", listOf(
+        "Kebele 01", "Kebele 02", "Tebase"
+    )),
+    CityLocation("Debre Markos", listOf(
+        "Kebele 01", "Kebele 02"
+    )),
+    CityLocation("Asella", listOf(
+        "Kebele 01", "Kebele 02"
+    )),
+    CityLocation("Bishoftu", listOf(
+        "Babogaya", "Bishoftu Lake", "Hora", "Kuriftu"
+    )),
+    CityLocation("Shashemene", listOf(
+        "Kebele 01", "Kebele 02", "Rastafarian Quarter"
+    )),
+    CityLocation("Gambela", listOf(
+        "Kebele 01", "Kebele 02"
+    )),
+    CityLocation("Semera", listOf(
+        "Kebele 01", "Logia"
+    ))
+)
+
 // --- Models ---
 data class Product(
     val id: String,
@@ -78,8 +157,31 @@ data class Product(
     val categoryId: String,
     val sellerName: String = "Verified Seller",
     val isPromoted: Boolean = false,
-    val timeAgo: String = "2 hours ago"
+    val timeAgo: String = "2 hours ago",
+    val createdAt: Long = System.currentTimeMillis()
 )
+
+fun getRelativeTime(product: Product): String {
+    val diffMs = System.currentTimeMillis() - product.createdAt
+    if (diffMs < 0) return product.timeAgo
+    val diffSec = diffMs / 1000
+    if (diffSec < 60) {
+        return "Just now"
+    }
+    val diffMin = diffSec / 60
+    if (diffMin < 60) {
+        return "$diffMin ${if (diffMin == 1L) "min" else "mins"} ago"
+    }
+    val diffHours = diffMin / 60
+    if (diffHours < 24) {
+        return "$diffHours ${if (diffHours == 1L) "hour" else "hours"} ago"
+    }
+    val diffDays = diffHours / 24
+    if (diffDays < 7) {
+        return "$diffDays ${if (diffDays == 1L) "day" else "days"} ago"
+    }
+    return product.timeAgo
+}
 
 data class Category(
     val id: String,
@@ -138,7 +240,8 @@ val mockProducts = mutableListOf(
         categoryId = "1",
         sellerName = "Abebe Kebede",
         isPromoted = true,
-        timeAgo = "2 hours ago"
+        timeAgo = "2 hours ago",
+        createdAt = System.currentTimeMillis() - 2 * 3600 * 1000
     ),
     Product(
         id = "102",
@@ -151,7 +254,8 @@ val mockProducts = mutableListOf(
         categoryId = "2",
         sellerName = "Selam Electronics",
         isPromoted = false,
-        timeAgo = "10 mins ago"
+        timeAgo = "10 mins ago",
+        createdAt = System.currentTimeMillis() - 10 * 60 * 1000
     ),
     Product(
         id = "103",
@@ -164,7 +268,8 @@ val mockProducts = mutableListOf(
         categoryId = "3",
         sellerName = "Sheger Homes & Realty",
         isPromoted = true,
-        timeAgo = "1 day ago"
+        timeAgo = "1 day ago",
+        createdAt = System.currentTimeMillis() - 24 * 3600 * 1000
     ),
     Product(
         id = "104",
@@ -177,7 +282,8 @@ val mockProducts = mutableListOf(
         categoryId = "2",
         sellerName = "Yonas Tech Store",
         isPromoted = false,
-        timeAgo = "3 hours ago"
+        timeAgo = "3 hours ago",
+        createdAt = System.currentTimeMillis() - 3 * 3600 * 1000
     ),
     Product(
         id = "105",
@@ -190,7 +296,8 @@ val mockProducts = mutableListOf(
         categoryId = "4",
         sellerName = "Habesha Kicks",
         isPromoted = false,
-        timeAgo = "Yesterday"
+        timeAgo = "Yesterday",
+        createdAt = System.currentTimeMillis() - 24 * 3600 * 1000
     ),
     Product(
         id = "106",
@@ -203,7 +310,8 @@ val mockProducts = mutableListOf(
         categoryId = "2",
         sellerName = "Elias Laptop Shop",
         isPromoted = false,
-        timeAgo = "2 days ago"
+        timeAgo = "2 days ago",
+        createdAt = System.currentTimeMillis() - 2 * 24 * 3600 * 1000
     )
 )
 
@@ -214,19 +322,13 @@ fun MarketplaceApp() {
     val context = LocalContext.current
     remember {
         NetworkManager.initialize(context.applicationContext)
-        true
-    }
-    
-    val initialProducts = remember {
         val loaded = ProductPersistence.loadProducts(context)
         if (loaded != null && loaded.isNotEmpty()) {
-            loaded
-        } else {
-            mockProducts
+            mockProducts.clear()
+            mockProducts.addAll(loaded)
         }
+        true
     }
-    
-    val products = remember { mutableStateListOf<Product>().apply { addAll(initialProducts) } }
     val sharedPrefs = remember { context.getSharedPreferences("vibro_prefs", Context.MODE_PRIVATE) }
 
     val currentVersion = remember(context) {
@@ -325,6 +427,16 @@ fun MarketplaceApp() {
             Review("You", "Abebe K.", 5, "Prompt responses. Transaction went smoothly and they paid instantly.", "2 days ago"),
             Review("You", "Selamawit T.", 5, "Excellent buyer! Very clear communication.", "1 week ago")
         )
+    }
+    val products = remember {
+        mutableStateListOf<Product>().apply {
+            val loaded = ProductPersistence.loadProducts(context)
+            if (loaded != null && loaded.isNotEmpty()) {
+                mockProducts.clear()
+                mockProducts.addAll(loaded)
+            }
+            addAll(mockProducts)
+        }
     }
     val savedProductIds = remember { mutableStateListOf<String>().apply { add("101"); add("103") } }
     val chats = remember {
@@ -903,7 +1015,7 @@ fun MainContainerScreen(
                             imageUrl = finalImgUrl,
                             location = location,
                             condition = condition,
-                            description = description,
+                            description = if (description.trim().isNotEmpty()) description else title,
                             categoryId = categoryId,
                             sellerName = "You",
                             isPromoted = isPromoted,
@@ -961,12 +1073,15 @@ fun HomeScreenContent(
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var showConnectionDialog by remember { mutableStateOf(false) }
+    var showCitySelectorHome by remember { mutableStateOf(false) }
+    var selectedCityHomeFilter by remember { mutableStateOf("Ethiopia (All)") }
 
     val filteredProducts = products.filter { product ->
         val matchesSearch = product.title.contains(searchQuery, ignoreCase = true) ||
                             product.description.contains(searchQuery, ignoreCase = true)
         val matchesCategory = selectedCategoryId == null || product.categoryId == selectedCategoryId
-        matchesSearch && matchesCategory
+        val matchesCity = if (selectedCityHomeFilter == "Ethiopia (All)") true else product.location.contains(selectedCityHomeFilter, ignoreCase = true)
+        matchesSearch && matchesCategory && matchesCity
     }
 
     Column(
@@ -986,7 +1101,7 @@ fun HomeScreenContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { showCitySelectorHome = true }.padding(4.dp)) {
                         Box(
                             modifier = Modifier.size(32.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
                             contentAlignment = Alignment.Center
@@ -996,7 +1111,7 @@ fun HomeScreenContent(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text("LOCATION", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("Ethiopia (All)", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurface)
+                            Text(selectedCityHomeFilter, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                     Box(
@@ -1038,43 +1153,7 @@ fun HomeScreenContent(
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFFE6F4EA) 
-                            else if (NetworkManager.isSupabaseConfigured) Color(0xFFFFEBEE)
-                            else Color(0xFFFEF7E0)
-                        )
-                        .clickable { showConnectionDialog = true }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(
-                                if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFF137333) 
-                                else if (NetworkManager.isSupabaseConfigured) Color(0xFFD32F2F)
-                                else Color(0xFFB06000), 
-                                CircleShape
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (NetworkManager.isSupabaseConfigured) {
-                            if (NetworkManager.syncErrorMessage == null) "Server: Connected to Supabase Sandbox (${NetworkManager.syncItemCount} items)" 
-                            else "Server: Sync Error (Click to Config)"
-                        } else "Server: Offline Sandbox Mode (Click to Config & Sync)",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFF137333) 
-                                else if (NetworkManager.isSupabaseConfigured) Color(0xFFD32F2F)
-                                else Color(0xFFB06000)
-                    )
-                }
+
             }
         }
 
@@ -1155,6 +1234,50 @@ fun HomeScreenContent(
                 }
 
 
+            }
+        }
+    }
+
+    if (showCitySelectorHome) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showCitySelectorHome = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Select City", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(bottom = 16.dp))
+                    
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            selectedCityHomeFilter = "Ethiopia (All)"
+                            showCitySelectorHome = false
+                        }.padding(vertical = 12.dp)
+                    ) {
+                        Text("Ethiopia (All)", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+                    }
+                    
+                    HorizontalDivider()
+                    
+                    LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                        items(ethiopianCities) { city ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    selectedCityHomeFilter = city.name
+                                    showCitySelectorHome = false
+                                }.padding(vertical = 12.dp)
+                            ) {
+                                Text(city.name, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { showCitySelectorHome = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Close")
+                    }
+                }
             }
         }
     }
@@ -1294,22 +1417,24 @@ fun CategoryChip(
     iconColor: Color,
     onClick: () -> Unit
 ) {
-    val activeBg = if (isSelected) MaterialTheme.colorScheme.primary else bgColor
-    val activeTint = if (isSelected) MaterialTheme.colorScheme.onPrimary else iconColor
-    val activeText = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    // Unify colors: use primary when selected, and a subtle transparent surface variant when unselected
+    val activeBg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val activeTint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
 
-    Row(
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(32.dp))
+            .size(52.dp)
+            .clip(CircleShape)
             .background(activeBg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = activeTint, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = activeText)
+        Icon(
+            imageVector = icon,
+            contentDescription = name,
+            tint = activeTint,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
@@ -1610,6 +1735,10 @@ fun ProfileScreenContent(
     onManualCheckForUpdates: () -> Unit = {}
 ) {
     var activeSubScreen by rememberSaveable { mutableStateOf<String?>(null) }
+
+    BackHandler(enabled = activeSubScreen != null) {
+        activeSubScreen = null
+    }
 
     var currentPlan by remember { mutableStateOf("Free Tier") }
     var isPhoneVerified by remember { mutableStateOf(false) }
@@ -3573,6 +3702,15 @@ fun ProductDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     var showEditDialog by remember { mutableStateOf(false) }
     var showQuickChatDialog by remember { mutableStateOf(false) }
+    var showFullScreenPhotoViewer by remember { mutableStateOf(false) }
+
+    if (showFullScreenPhotoViewer) {
+        FullScreenImageGallery(
+            images = getProductImages(product),
+            initialIndex = 0,
+            onDismiss = { showFullScreenPhotoViewer = false }
+        )
+    }
 
     if (activeReadingArticle != null) {
         val article = activeReadingArticle!!
@@ -3743,6 +3881,7 @@ fun ProductDetailScreen(
                     .fillMaxWidth()
                     .height(240.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { showFullScreenPhotoViewer = true }
             ) {
                 AsyncImage(
                     model = product.imageUrl,
@@ -4281,7 +4420,7 @@ fun ProductGridCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(10.dp))
                 Spacer(modifier = Modifier.width(2.dp))
-                Text(product.timeAgo, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(getRelativeTime(product), fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -4427,6 +4566,7 @@ fun PostAdDialog(
 
     // Navigation and Selector views inside the wizard steps
     var currentSubView by rememberSaveable { mutableStateOf("main") } // "main", "select_category", "select_subcategory", "selector"
+    var selectedCityPostAd by remember { mutableStateOf<CityLocation?>(null) }
     var selectorTitle by rememberSaveable { mutableStateOf("") }
     var selectorOptions by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectorSelectedValue by rememberSaveable { mutableStateOf("") }
@@ -4840,6 +4980,74 @@ fun PostAdDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(text = sub, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (currentSubView == "select_city") {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = "Select City",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ethiopianCities.forEach { city ->
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedCityPostAd = city
+                                            currentSubView = "select_subcity"
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = city.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (currentSubView == "select_subcity") {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = "Select Area in ${selectedCityPostAd?.name}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            selectedCityPostAd?.subLocations?.forEach { subcity ->
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            location = "${selectedCityPostAd?.name}, $subcity"
+                                            currentSubView = "main"
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = subcity, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
                                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
@@ -5406,129 +5614,20 @@ fun PostAdDialog(
                                     }
                                 }
 
-                                Text(
-                                    text = "Photo Gallery System",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                                )
 
-                                OutlinedTextField(
-                                    value = imageUrl,
-                                    onValueChange = { imageUrl = it },
-                                    label = { Text("Product Image URL Link") },
-                                    placeholder = { Text("https://...") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true
-                                )
 
-                                var isUploadingImage by remember { mutableStateOf(false) }
-                                val scopeLocal = rememberCoroutineScope()
-                                val contextLocal = LocalContext.current
 
-                                val imagePickerLauncher = rememberLauncherForActivityResult(
-                                    contract = ActivityResultContracts.GetContent()
-                                ) { uri ->
-                                    if (uri != null) {
-                                        scopeLocal.launch {
-                                            isUploadingImage = true
-                                            Toast.makeText(contextLocal, "Compressing selected photo...", Toast.LENGTH_SHORT).show()
-                                            try {
-                                                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { compressImageUri(contextLocal, uri) }
-                                                if (bytes != null) {
-                                                    val localDir = java.io.File(contextLocal.cacheDir, "local_uploads")
-                                                    if (!localDir.exists()) localDir.mkdirs()
-                                                    val localFile = java.io.File(localDir, "uploaded_${System.currentTimeMillis()}.jpg")
-                                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { localFile.writeBytes(bytes) }
-                                                    val localFileUri = "file://${localFile.absolutePath}"
-                                                    
-                                                    imageUrl = localFileUri
-                                                    
-                                                    var uploadSuccessful = false
-                                                    if (NetworkManager.isSupabaseConfigured) {
-                                                        Toast.makeText(contextLocal, "Uploading to Supabase...", Toast.LENGTH_SHORT).show()
-                                                        val remoteUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { NetworkManager.uploadImageToSupabase(bytes, "uploaded_listing_${System.currentTimeMillis()}.jpg") }
-                                                        if (remoteUrl != null) {
-                                                            imageUrl = remoteUrl
-                                                            uploadSuccessful = true
-                                                            Toast.makeText(contextLocal, "Uploaded to Supabase Storage!", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                    
-                                                    if (!uploadSuccessful && NetworkManager.isImageKitConfigured) {
-                                                        Toast.makeText(contextLocal, "Uploading to ImageKit...", Toast.LENGTH_SHORT).show()
-                                                        val remoteUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { NetworkManager.uploadImageToImageKit(bytes, "uploaded_listing_${System.currentTimeMillis()}.jpg") }
-                                                        if (remoteUrl != null) {
-                                                            imageUrl = remoteUrl
-                                                            uploadSuccessful = true
-                                                            Toast.makeText(contextLocal, "Uploaded to ImageKit Cloud!", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                    
-                                                    if (!uploadSuccessful) {
-                                                        Toast.makeText(contextLocal, "Saved locally. Ready to publish!", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                }
-                                            } catch (e: Exception) {
-                                                Toast.makeText(contextLocal, "Error uploading photo: ${NetworkManager.getErrorMessage(e)}", Toast.LENGTH_LONG).show()
-                                            } finally {
-                                                isUploadingImage = false
-                                            }
-                                        }
-                                    }
-                                }
 
-                                val buttonText = when {
-                                    isUploadingImage -> "Uploading to Cloud..."
-                                    NetworkManager.isSupabaseConfigured -> "📸 Capture Image / Upload to Supabase"
-                                    NetworkManager.isImageKitConfigured -> "📸 Capture Image / Upload to ImageKit"
-                                    else -> "📸 Choose Image from Gallery"
-                                }
 
-                                Button(
-                                    onClick = { imagePickerLauncher.launch("image/*") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                                    shape = RoundedCornerShape(8.dp),
-                                    enabled = !isUploadingImage
-                                ) {
-                                    Text(buttonText, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
-                                }
 
-                                if (imageUrl.trim().isNotEmpty()) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(140.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        AsyncImage(
-                                            model = imageUrl,
-                                            contentDescription = "Uploaded Photo",
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop,
-                                            error = rememberAsyncImagePainter(model = "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=600")
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(8.dp)
-                                                .size(32.dp)
-                                                .clip(CircleShape)
-                                                .background(Color.Black.copy(alpha = 0.6f))
-                                                .clickable { imageUrl = "" },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                }
+                                // Image selection and upload systems removed as requested
 
                                 // Description box
                                 OutlinedTextField(
                                     value = description,
                                     onValueChange = { description = it },
-                                    label = { Text("Product Description (Details, Condition models, contact specifications...)") },
+                                    label = { Text("Product Description") },
+                                    placeholder = { Text("Optional (If left blank, the product title will be used)") },
                                     modifier = Modifier.fillMaxWidth().height(100.dp)
                                 )
                             }
@@ -5550,11 +5649,7 @@ fun PostAdDialog(
                                             selectedValue = location,
                                             placeholder = "Select area",
                                             onClick = {
-                                                selectorTitle = "Select Ethiopia Region Location"
-                                                selectorOptions = locations
-                                                selectorSelectedValue = location
-                                                selectorTargetProperty = "location"
-                                                currentSubView = "selector"
+                                                currentSubView = "select_city"
                                             }
                                         )
                                     }
@@ -5806,7 +5901,17 @@ fun PostAdDialog(
                             }
 
                             // --- Publish / Submit Ad Button ---
-                            val isFormValid = title.trim().isNotEmpty() && price.trim().isNotEmpty() && description.trim().isNotEmpty() && !spamWarningDetected
+                            val isFormValid = title.trim().isNotEmpty() && price.trim().isNotEmpty() && location.trim().isNotEmpty() && !spamWarningDetected
+                            
+                            if (!isFormValid && !spamWarningDetected) {
+                                Text(
+                                    text = "Please fill in all required fields (Title, Price, Location) to publish your ad.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                            }
+                            
                             Button(
                                 onClick = {
                                     val trimTitle = title.trim()
@@ -5901,7 +6006,8 @@ fun PostAdDialog(
                                     }
 
                                     val finalDescription = if (specsBuilder.isNotEmpty()) {
-                                        "📌 SPECIFICATIONS:\n" + specsBuilder.toString() + "\n📝 AD DESCRIPTION:\n" + description
+                                        val descPart = if (description.trim().isNotEmpty()) "\n📝 AD DESCRIPTION:\n" + description else ""
+                                        "📌 SPECIFICATIONS:\n" + specsBuilder.toString() + descPart
                                     } else {
                                         description
                                     }
@@ -6600,6 +6706,117 @@ fun compressImageUri(context: Context, uri: android.net.Uri): ByteArray? {
     }
 }
 
+fun getProductImages(product: Product): List<String> {
+    val list = mutableListOf(product.imageUrl)
+    val categoryId = product.categoryId
+    val alt1 = when (categoryId) {
+        "1" -> "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80"
+        "2" -> "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&q=80"
+        "3" -> "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600&q=80"
+        "4" -> "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80"
+        "5" -> "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=600&q=80"
+        else -> "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80"
+    }
+    val alt2 = when (categoryId) {
+        "1" -> "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=600&q=80"
+        "2" -> "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=600&q=80"
+        "3" -> "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=600&q=80"
+        "4" -> "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80"
+        "5" -> "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=600&q=80"
+        else -> "https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=600&q=80"
+    }
+    list.add(alt1)
+    list.add(alt2)
+    return list
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun FullScreenImageGallery(
+    images: List<String>,
+    initialIndex: Int,
+    onDismiss: () -> Unit
+) {
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { images.size }
+    )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Black
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = images[page],
+                            contentDescription = "Zoomed Product Image ${page + 1}",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.Black.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${pagerState.currentPage + 1} / ${images.size}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+
+                BackHandler {
+                    onDismiss()
+                }
+            }
+        }
+    }
+}
+
 // --- Quick Chat Dialog ---
 @Composable
 fun QuickChatDialog(
@@ -6616,152 +6833,187 @@ fun QuickChatDialog(
         "I want to buy this, can we talk?"
     )
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Column(
+            Card(
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
-                    .padding(20.dp)
                     .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = {} // Consume click to prevent dismiss when clicking inside the card
+                    )
             ) {
-                // Header
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.padding(bottom = 12.dp)
+                Column(
+                    modifier = Modifier
+                        .padding(top = 12.dp, bottom = 24.dp, start = 20.dp, end = 20.dp)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
                 ) {
+                    // Bottom Sheet Handle Bar
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                        contentAlignment = Alignment.Center
+                            .width(40.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                            .align(Alignment.CenterHorizontally)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Header
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Chat,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = "Chat with $sellerName",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = productTitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Section title
-                Text(
-                    text = "Quick templates:",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                // Scrollable row of templates
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    templates.forEach { template ->
-                        val isSelected = messageText == template
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                            ),
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.clickable {
-                                messageText = template
-                            }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Chat,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
                             Text(
-                                text = template,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                text = "Chat with $sellerName",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = productTitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                // Custom message input
-                Text(
-                    text = "Customize message:",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                OutlinedTextField(
-                    value = messageText,
-                    onValueChange = { messageText = it },
-                    placeholder = { Text("Type your message here...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    maxLines = 4,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    // Section title
+                    Text(
+                        text = "Quick templates:",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
-                )
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Actions
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                onSend(messageText.trim())
-                            }
-                        },
-                        enabled = messageText.isNotBlank(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    // Scrollable row of templates
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                        templates.forEach { template ->
+                            val isSelected = messageText == template
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                ),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.clickable {
+                                    messageText = template
+                                }
+                            ) {
+                                Text(
+                                    text = template,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Custom message input
+                    Text(
+                        text = "Customize message:",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = messageText,
+                        onValueChange = { messageText = it },
+                        placeholder = { Text("Type your message here...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
                         )
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Actions
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel")
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Send", fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = {
+                                if (messageText.isNotBlank()) {
+                                    onSend(messageText.trim())
+                                }
+                            },
+                            enabled = messageText.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Send", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

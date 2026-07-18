@@ -3,9 +3,7 @@ package com.example
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.util.Log
-import android.widget.Toast
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,11 +30,17 @@ object GitHubUpdateManager {
 
     suspend fun checkForUpdates(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder()
+            val builder = Request.Builder()
                 .url(LATEST_RELEASE_URL)
                 .header("User-Agent", "VibroMarketplace-Updater")
                 .header("Accept", "application/vnd.github.v3+json")
-                .build()
+
+            val token = BuildConfig.GITHUB_TOKEN
+            if (token.isNotEmpty() && token != "YOUR_GITHUB_TOKEN_HERE" && token.startsWith("ghp_")) {
+                builder.header("Authorization", "token $token")
+            }
+
+            val request = builder.build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
@@ -45,7 +49,7 @@ object GitHubUpdateManager {
                 }
                 val bodyString = response.body?.string() ?: return@withContext null
                 val json = JSONObject(bodyString)
-                val latestTag = json.optString("tag_name", "").trim()
+                val latestTag = json.optString("tag_name", "")
                 val releaseNotes = json.optString("body", "No release notes provided.")
                 
                 val assets = json.optJSONArray("assets")
@@ -81,9 +85,9 @@ object GitHubUpdateManager {
     }
 
     private fun isNewerVersion(current: String, latest: String): Boolean {
-        val cleanCurrent = current.trim().lowercase().removePrefix("v").replace(Regex("[^0-9.]"), "")
-        val cleanLatest = latest.trim().lowercase().removePrefix("v").replace(Regex("[^0-9.]"), "")
-        if (cleanCurrent == cleanLatest || cleanLatest.isEmpty()) return false
+        val cleanCurrent = current.trim().lowercase().removePrefix("v")
+        val cleanLatest = latest.trim().lowercase().removePrefix("v")
+        if (cleanCurrent == cleanLatest) return false
 
         val currentParts = cleanCurrent.split(".").map { it.toIntOrNull() ?: 0 }
         val latestParts = cleanLatest.split(".").map { it.toIntOrNull() ?: 0 }
@@ -117,33 +121,41 @@ object GitHubUpdateManager {
                 val body = response.body ?: return@withContext null
                 val totalBytes = body.contentLength()
                 
-                val cacheDir = File(context.externalCacheDir ?: context.cacheDir, "updates")
+                // Store in cache dir defined in file_paths.xml
+                val cacheDir = context.externalCacheDir ?: context.cacheDir
                 if (!cacheDir.exists()) {
                     cacheDir.mkdirs()
                 }
-                
                 val apkFile = File(cacheDir, "vibro_update.apk")
                 if (apkFile.exists()) {
                     apkFile.delete()
                 }
 
-                body.byteStream().use { inputStream ->
-                    FileOutputStream(apkFile).use { outputStream ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            outputStream.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-                            if (totalBytes > 0) {
-                                val progress = totalRead.toFloat() / totalBytes
-                                onProgress(progress)
+                try {
+                    body.byteStream().use { inputStream ->
+                        FileOutputStream(apkFile).use { outputStream ->
+                            val buffer = ByteArray(8192)
+                            var bytesRead: Int
+                            var totalRead = 0L
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                outputStream.write(buffer, 0, bytesRead)
+                                totalRead += bytesRead
+                                if (totalBytes > 0) {
+                                    val progress = totalRead.toFloat() / totalBytes
+                                    onProgress(progress)
+                                }
                             }
+                            outputStream.flush()
                         }
-                        outputStream.flush()
                     }
+                    return@withContext apkFile
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error writing APK file streams", e)
+                    if (apkFile.exists()) {
+                        apkFile.delete()
+                    }
+                    return@withContext null
                 }
-                return@withContext apkFile
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading update APK", e)
@@ -153,19 +165,6 @@ object GitHubUpdateManager {
 
     fun installApk(context: Context, apkFile: File) {
         try {
-            // Check if we have permission to install packages (Android 8.0+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!context.packageManager.canRequestPackageInstalls()) {
-                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:${context.packageName}")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
-                    Toast.makeText(context, "Please allow 'Install from this source' and try again", Toast.LENGTH_LONG).show()
-                    return
-                }
-            }
-
             val authority = "${context.packageName}.fileprovider"
             val apkUri = FileProvider.getUriForFile(context, authority, apkFile)
             val intent = Intent(Intent.ACTION_VIEW).apply {
