@@ -1,0 +1,6 @@
+{
+  "name": "Vibro",
+  "description": "Premium classified ads marketplace app, live in Ethiopia",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
