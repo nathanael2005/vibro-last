@@ -3,7 +3,9 @@ package com.example
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -151,6 +153,19 @@ object GitHubUpdateManager {
 
     fun installApk(context: Context, apkFile: File) {
         try {
+            // Check if we have permission to install packages (Android 8.0+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    Toast.makeText(context, "Please allow 'Install from this source' and try again", Toast.LENGTH_LONG).show()
+                    return
+                }
+            }
+
             val authority = "${context.packageName}.fileprovider"
             val apkUri = FileProvider.getUriForFile(context, authority, apkFile)
             val intent = Intent(Intent.ACTION_VIEW).apply {
