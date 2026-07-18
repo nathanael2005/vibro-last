@@ -227,6 +227,105 @@ fun MarketplaceApp() {
     }
     
     val products = remember { mutableStateListOf<Product>().apply { addAll(initialProducts) } }
+    val sharedPrefs = remember { context.getSharedPreferences("vibro_prefs", Context.MODE_PRIVATE) }
+
+    val currentVersion = remember(context) {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (e: Exception) {
+            "1.0"
+        }
+    }
+
+    var updateInfo by remember { mutableStateOf<GitHubUpdateManager.UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var isDownloading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        // Automatically check for updates on launch
+        val info = GitHubUpdateManager.checkForUpdates(currentVersion)
+        if (info != null && info.hasUpdate) {
+            updateInfo = info
+            showUpdateDialog = true
+        }
+    }
+
+    val onManualCheckForUpdates: () -> Unit = {
+        Toast.makeText(context, "Checking for updates...", Toast.LENGTH_SHORT).show()
+        coroutineScope.launch {
+            val info = GitHubUpdateManager.checkForUpdates(currentVersion)
+            if (info != null) {
+                if (info.hasUpdate) {
+                    updateInfo = info
+                    showUpdateDialog = true
+                } else {
+                    Toast.makeText(context, "Vibro is up-to-date! (Version: $currentVersion)", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(context, "Failed to connect to update server. Please check your network.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    var isLoggedIn by remember {
+        mutableStateOf(sharedPrefs.getBoolean("is_logged_in", false))
+    }
+    var userName by remember {
+        mutableStateOf(sharedPrefs.getString("user_name", "Guest User") ?: "Guest User")
+    }
+    var userEmail by remember {
+        mutableStateOf(sharedPrefs.getString("user_email", "guest@example.com") ?: "guest@example.com")
+    }
+    var userCity by remember {
+        mutableStateOf(sharedPrefs.getString("user_city", "Addis Ababa, Ethiopia") ?: "Addis Ababa, Ethiopia")
+    }
+
+    val onSignIn: (String, String, String, String) -> Unit = { email, password, name, city ->
+        sharedPrefs.edit()
+            .putBoolean("is_logged_in", true)
+            .putString("user_email", email)
+            .putString("user_name", name.ifEmpty { email.substringBefore("@") })
+            .putString("user_city", city.ifEmpty { "Addis Ababa, Ethiopia" })
+            .apply()
+        isLoggedIn = true
+        userEmail = email
+        userName = name.ifEmpty { email.substringBefore("@") }
+        userCity = city.ifEmpty { "Addis Ababa, Ethiopia" }
+    }
+
+    val onSignOut: () -> Unit = {
+        sharedPrefs.edit()
+            .putBoolean("is_logged_in", false)
+            .putString("user_email", "guest@example.com")
+            .putString("user_name", "Guest User")
+            .putString("user_city", "Addis Ababa, Ethiopia")
+            .apply()
+        isLoggedIn = false
+        userEmail = "guest@example.com"
+        userName = "Guest User"
+        userCity = "Addis Ababa, Ethiopia"
+    }
+
+    // --- Global Shared States ---
+    val sellerReviews = remember {
+        mutableStateListOf<Review>(
+            Review("Abebe Kebede", "Abebe K.", 5, "Fast communication and original product. Secure transaction around Bole, highly recommended!", "2 days ago"),
+            Review("Abebe Kebede", "Marta Y.", 4, "Reliable seller, but was slightly late to our meeting point. The Camry is very clean though.", "5 days ago"),
+            Review("Selam Electronics", "Selamawit T.", 5, "Trustworthy seller. The iPhone specs were exactly as stated in the ad. Clean transaction!", "1 week ago"),
+            Review("Selam Electronics", "Elias J.", 5, "Genuine Apple products. The gold color is gorgeous.", "2 weeks ago"),
+            Review("Sheger Homes & Realty", "Mariam W.", 5, "Bought a wood table and frame sofa. Durable joinery, exactly as promised.", "5 days ago"),
+            Review("Sheger Homes & Realty", "Tariku B.", 4, "Spacious flat, caretakers were very cooperative. Good experience.", "2 weeks ago"),
+            Review("Yonas Tech Store", "Yonas M.", 4, "Fair prices and very polite. Slight delay in meeting up, but overall very active and reliable.", "3 days ago"),
+            Review("Yonas Tech Store", "Kidus H.", 5, "Got my PS5 from them. Sealed, brand new, works perfectly!", "1 week ago"),
+            Review("Habesha Kicks", "Dawit L.", 5, "Amazing sneakers, authentic quality. Best shop in Hawassa!", "1 day ago"),
+            Review("Habesha Kicks", "Betty K.", 5, "Very stylish and comfortable shoes. Recommended!", "3 days ago"),
+            Review("Elias Laptop Shop", "Sami G.", 4, "Laptop runs well, battery life is decent. Polite seller.", "4 days ago"),
+            Review("Elias Laptop Shop", "Hana D.", 4, "Good experience, laptop came clean with all original accessories.", "1 week ago"),
+            Review("You", "Abebe K.", 5, "Prompt responses. Transaction went smoothly and they paid instantly.", "2 days ago"),
+            Review("You", "Selamawit T.", 5, "Excellent buyer! Very clear communication.", "1 week ago")
+        )
+    }
     val savedProductIds = remember { mutableStateListOf<String>().apply { add("101"); add("103") } }
     val chats = remember {
         mutableStateListOf(
