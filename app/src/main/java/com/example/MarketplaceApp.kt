@@ -342,10 +342,10 @@ fun MarketplaceApp() {
             remember {
                 NetworkManager.initialize(context.applicationContext)
                 AdDraftStore.loadDraft(context.applicationContext) // Persistent draft loading
-                val loaded = ProductPersistence.loadProducts(context)
-                if (loaded != null && loaded.isNotEmpty()) {
-                    mockProducts.clear()
-                    mockProducts.addAll(loaded)
+                
+                // Robust Check: Notify user if Supabase isn't configured in .env
+                if (!NetworkManager.isSupabaseConfigured) {
+                    android.widget.Toast.makeText(context, "Supabase not configured. App running in offline/mock mode.", android.widget.Toast.LENGTH_LONG).show()
                 }
                 true
             }
@@ -449,16 +449,20 @@ fun MarketplaceApp() {
     }
     val products = remember {
         mutableStateListOf<Product>().apply {
+            // Instant Loading Strategy: Load from persistence immediately
             val loaded = ProductPersistence.loadProducts(context)
             if (loaded != null && loaded.isNotEmpty()) {
+                // Synchronize global mock list with persisted state for consistent detail views
                 mockProducts.clear()
                 mockProducts.addAll(loaded)
             }
+            
+            // Map posted IDs to show "You" as the seller for user's own ads
             val myPostedAdIds = ProductPersistence.getPostedAdIds(context)
-            val mapped = mockProducts.map { p ->
+            val initialList = mockProducts.map { p ->
                 if (myPostedAdIds.contains(p.id)) p.copy(sellerName = "You") else p
             }
-            addAll(mapped)
+            addAll(initialList)
         }
     }
     val savedProductIds = remember { mutableStateListOf<String>().apply { add("101"); add("103") } }
