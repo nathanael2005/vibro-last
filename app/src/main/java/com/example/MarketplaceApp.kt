@@ -17,10 +17,13 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,6 +63,8 @@ import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.isSystemInDarkTheme
+import com.example.ui.theme.MyApplicationTheme
 
 // --- Navigation Routes ---
 const val SPLASH_ROUTE = "splash"
@@ -67,7 +72,9 @@ const val WELCOME_ROUTE = "welcome"
 const val LOGIN_ROUTE = "login"
 const val MAIN_SHELL_ROUTE = "main"
 const val PRODUCT_DETAIL_ROUTE = "product/{productId}"
+const val SELLER_PROFILE_ROUTE = "seller_profile/{sellerName}"
 fun createProductDetailRoute(id: String) = "product/$id"
+fun createSellerProfileRoute(sellerName: String) = "seller_profile/$sellerName"
 
 // --- Location Models ---
 data class CityLocation(
@@ -317,19 +324,31 @@ val mockProducts = mutableListOf(
 
 @Composable
 fun MarketplaceApp() {
-    val navController = rememberNavController()
-    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    remember {
-        NetworkManager.initialize(context.applicationContext)
-        val loaded = ProductPersistence.loadProducts(context)
-        if (loaded != null && loaded.isNotEmpty()) {
-            mockProducts.clear()
-            mockProducts.addAll(loaded)
-        }
-        true
-    }
     val sharedPrefs = remember { context.getSharedPreferences("vibro_prefs", Context.MODE_PRIVATE) }
+    var themeMode by remember { mutableStateOf(sharedPrefs.getString("app_theme_mode", "system") ?: "system") }
+
+    val systemInDark = isSystemInDarkTheme()
+    val useDarkTheme = when (themeMode) {
+        "light" -> false
+        "dark" -> true
+        else -> systemInDark
+    }
+
+    MyApplicationTheme(darkTheme = useDarkTheme) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            val navController = rememberNavController()
+            val coroutineScope = rememberCoroutineScope()
+            remember {
+                NetworkManager.initialize(context.applicationContext)
+                AdDraftStore.loadDraft(context.applicationContext) // Persistent draft loading
+                val loaded = ProductPersistence.loadProducts(context)
+                if (loaded != null && loaded.isNotEmpty()) {
+                    mockProducts.clear()
+                    mockProducts.addAll(loaded)
+                }
+                true
+            }
 
     val currentVersion = remember(context) {
         try {
@@ -435,7 +454,11 @@ fun MarketplaceApp() {
                 mockProducts.clear()
                 mockProducts.addAll(loaded)
             }
-            addAll(mockProducts)
+            val myPostedAdIds = ProductPersistence.getPostedAdIds(context)
+            val mapped = mockProducts.map { p ->
+                if (myPostedAdIds.contains(p.id)) p.copy(sellerName = "You") else p
+            }
+            addAll(mapped)
         }
     }
     val savedProductIds = remember { mutableStateListOf<String>().apply { add("101"); add("103") } }
@@ -514,6 +537,7 @@ fun MarketplaceApp() {
 
                     NetworkManager.syncItemCount = allRemoteMaps.size
                     
+                    val myPostedAdIds = ProductPersistence.getPostedAdIds(context)
                     val remoteMapped = allRemoteMaps.map { map ->
                         val p = NetworkManager.mapMapToProduct(map)
                         val finalImage = if (p.imageUrl.isBlank() || p.imageUrl.equals("null", ignoreCase = true)) {
@@ -521,12 +545,16 @@ fun MarketplaceApp() {
                         } else {
                             p.imageUrl
                         }
-                        p.copy(imageUrl = finalImage)
+                        val finalSeller = if (myPostedAdIds.contains(p.id) || p.sellerName == "You") "You" else p.sellerName
+                        p.copy(imageUrl = finalImage, sellerName = finalSeller)
                     }.distinctBy { it.id }
 
                     // Keep unique mock products to preserve "remaining ads"
                     val remoteIds = remoteMapped.map { it.id }.toSet()
-                    val remainingMock = mockProducts.filter { it.id !in remoteIds }
+                    val remainingMock = mockProducts.map { p ->
+                        val finalSeller = if (myPostedAdIds.contains(p.id) || p.sellerName == "You") "You" else p.sellerName
+                        p.copy(sellerName = finalSeller)
+                    }.filter { it.id !in remoteIds }
 
                     products.clear()
                     products.addAll(remoteMapped)
@@ -655,7 +683,12 @@ fun MarketplaceApp() {
                 onAddReview = { reviewerName, rating, comment ->
                     sellerReviews.add(0, Review("You", reviewerName, rating, comment, "Just now"))
                 },
-                onManualCheckForUpdates = onManualCheckForUpdates
+                onManualCheckForUpdates = onManualCheckForUpdates,
+                currentThemeMode = themeMode,
+                onThemeModeChange = { mode ->
+                    themeMode = mode
+                    sharedPrefs.edit().putString("app_theme_mode", mode).apply()
+                }
             )
         }
 
@@ -780,6 +813,9 @@ fun MarketplaceApp() {
                         products.remove(toDelete)
                         mockProducts.remove(toDelete)
                         ProductPersistence.saveProducts(context, mockProducts)
+                    },
+                    onSellerClick = { sellerName ->
+                        navController.navigate(createSellerProfileRoute(sellerName))
                     }
                 )
             } else {
@@ -787,6 +823,22 @@ fun MarketplaceApp() {
                     Text("Product not found")
                 }
             }
+        }
+        
+        composable(
+            route = SELLER_PROFILE_ROUTE,
+            arguments = listOf(navArgument("sellerName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sellerName = backStackEntry.arguments?.getString("sellerName") ?: ""
+            SellerProfileScreen(
+                sellerName = sellerName,
+                products = products,
+                sellerReviews = sellerReviews,
+                onBackClick = { navController.popBackStack() },
+                onProductClick = { id ->
+                    navController.navigate(createProductDetailRoute(id))
+                }
+            )
         }
     }
 
@@ -817,6 +869,8 @@ fun MarketplaceApp() {
             }
         )
     }
+        }
+    }
 }
 
 // --- Main Container with bottom tab selection ---
@@ -837,41 +891,52 @@ fun MainContainerScreen(
     onRefreshFeed: () -> Unit,
     sellerReviews: List<Review>,
     onAddReview: (reviewerName: String, rating: Int, comment: String) -> Unit,
-    onManualCheckForUpdates: () -> Unit = {}
+    onManualCheckForUpdates: () -> Unit = {},
+    currentThemeMode: String = "system",
+    onThemeModeChange: (String) -> Unit = {}
 ) {
     var activeTab by remember { mutableStateOf("home") }
     var showPostAdDialog by remember { mutableStateOf(false) }
     var showLoginRequiredDialog by remember { mutableStateOf(false) }
+    var showAdvancedSearch by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
-        bottomBar = {
-            MarketplaceBottomNav(
-                activeTab = activeTab,
-                onTabSelected = { activeTab = it },
-                onPostAdClick = {
-                    if (isLoggedIn) {
-                        showPostAdDialog = true
-                    } else {
-                        showLoginRequiredDialog = true
+    if (showAdvancedSearch) {
+        AdvancedSearchScreen(
+            products = products,
+            onProductClick = onProductClick,
+            onClose = { showAdvancedSearch = false }
+        )
+    } else {
+        Scaffold(
+            bottomBar = {
+                MarketplaceBottomNav(
+                    activeTab = activeTab,
+                    onTabSelected = { activeTab = it },
+                    onPostAdClick = {
+                        if (isLoggedIn) {
+                            showPostAdDialog = true
+                        } else {
+                            showLoginRequiredDialog = true
+                        }
                     }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            when (activeTab) {
-                "home" -> HomeScreenContent(
-                    products = products,
-                    savedProductIds = savedProductIds,
-                    onProductClick = onProductClick,
-                    onRefreshFeed = onRefreshFeed
                 )
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                when (activeTab) {
+                    "home" -> HomeScreenContent(
+                        products = products,
+                        savedProductIds = savedProductIds,
+                        onProductClick = onProductClick,
+                        onRefreshFeed = onRefreshFeed,
+                        onSearchClick = { showAdvancedSearch = true }
+                    )
                 "saved" -> SavedScreenContent(
                     products = products,
                     savedProductIds = savedProductIds,
@@ -953,43 +1018,90 @@ fun MainContainerScreen(
                     sellerReviews = sellerReviews,
                     onAddReview = onAddReview,
                     onPostAdClick = { showPostAdDialog = true },
-                    onManualCheckForUpdates = onManualCheckForUpdates
+                    onManualCheckForUpdates = onManualCheckForUpdates,
+                    currentThemeMode = currentThemeMode,
+                    onThemeModeChange = onThemeModeChange
                 )
             }
 
             if (showLoginRequiredDialog) {
-                AlertDialog(
+                Dialog(
                     onDismissRequest = { showLoginRequiredDialog = false },
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            Text("Sign In Required", fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    text = {
-                        Text("To list your products and post ads on Vibro Marketplace, you need to sign in first. It only takes a minute!")
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                showLoginRequiredDialog = false
-                                onSignInClick()
-                            }
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        decorFitsSystemWindows = false
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.4f))
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null,
+                                onClick = { showLoginRequiredDialog = false }
+                            ),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = {}
+                                )
                         ) {
-                            Text("Sign In Now")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showLoginRequiredDialog = false }) {
-                            Text("Cancel")
+                            Column(
+                                modifier = Modifier
+                                    .padding(24.dp)
+                                    .navigationBarsPadding()
+                                    .fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(40.dp)
+                                        .height(4.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                                        .align(Alignment.CenterHorizontally)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                    Text("Sign In Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("To list your products and post ads on Vibro Marketplace, you need to sign in first. It only takes a minute!", style = MaterialTheme.typography.bodyMedium)
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Button(
+                                    onClick = {
+                                        showLoginRequiredDialog = false
+                                        onSignInClick()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Sign In Now")
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { showLoginRequiredDialog = false },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Cancel")
+                                }
+                            }
                         }
                     }
-                )
+                }
             }
 
             if (showPostAdDialog) {
@@ -1021,6 +1133,7 @@ fun MainContainerScreen(
                             isPromoted = isPromoted,
                             timeAgo = "Just now"
                         )
+                        ProductPersistence.addPostedAdId(context, newAdId)
                         products.add(0, newProd)
                         mockProducts.add(0, newProd)
                         ProductPersistence.saveProducts(context, mockProducts)
@@ -1032,7 +1145,20 @@ fun MainContainerScreen(
                                 try {
                                     val payload = NetworkManager.buildInsertPayload(newProd, NetworkManager.adTableKeys)
                                     android.util.Log.d("MarketplaceApp", "Prepared payload for 'ads' table: $payload")
-                                    NetworkManager.supabaseApi?.insertAd(payload)
+                                    val response = NetworkManager.supabaseApi?.insertAd(payload)
+                                    if (response != null && response.isNotEmpty()) {
+                                        val returnedProd = NetworkManager.mapMapToProduct(response[0])
+                                        ProductPersistence.addPostedAdId(context, returnedProd.id)
+                                        val idxProducts = products.indexOfFirst { it.id == newProd.id }
+                                        if (idxProducts >= 0) {
+                                            products[idxProducts] = returnedProd.copy(sellerName = "You")
+                                        }
+                                        val idxMock = mockProducts.indexOfFirst { it.id == newProd.id }
+                                        if (idxMock >= 0) {
+                                            mockProducts[idxMock] = returnedProd.copy(sellerName = "You")
+                                        }
+                                        ProductPersistence.saveProducts(context, mockProducts)
+                                    }
                                     android.util.Log.i("MarketplaceApp", "Synced newly published ad to Supabase (ads table).")
                                     NetworkManager.syncErrorMessage = null
                                 } catch (e: Exception) {
@@ -1040,12 +1166,25 @@ fun MainContainerScreen(
                                     try {
                                         val payload = NetworkManager.buildInsertPayload(newProd, NetworkManager.productTableKeys)
                                         android.util.Log.d("MarketplaceApp", "Prepared payload for 'products' table: $payload")
-                                        NetworkManager.supabaseApi?.insertProduct(payload)
+                                        val response = NetworkManager.supabaseApi?.insertProduct(payload)
+                                        if (response != null && response.isNotEmpty()) {
+                                            val returnedProd = NetworkManager.mapMapToProduct(response[0])
+                                            ProductPersistence.addPostedAdId(context, returnedProd.id)
+                                            val idxProducts = products.indexOfFirst { it.id == newProd.id }
+                                            if (idxProducts >= 0) {
+                                                products[idxProducts] = returnedProd.copy(sellerName = "You")
+                                            }
+                                            val idxMock = mockProducts.indexOfFirst { it.id == newProd.id }
+                                            if (idxMock >= 0) {
+                                                mockProducts[idxMock] = returnedProd.copy(sellerName = "You")
+                                            }
+                                            ProductPersistence.saveProducts(context, mockProducts)
+                                        }
                                         android.util.Log.i("MarketplaceApp", "Synced newly published ad to Supabase (products table).")
                                         NetworkManager.syncErrorMessage = null
                                     } catch (ex: Exception) {
-                                        android.util.Log.e("MarketplaceApp", "Could not sync new ad to Supabase (products table): ${NetworkManager.getErrorMessage(ex)}")
-                                        NetworkManager.syncErrorMessage = "Failed to insert ad: ${NetworkManager.getErrorMessage(ex)}"
+                                         android.util.Log.e("MarketplaceApp", "Could not sync new ad to Supabase (products table): ${NetworkManager.getErrorMessage(ex)}")
+                                         NetworkManager.syncErrorMessage = "Failed to insert ad: ${NetworkManager.getErrorMessage(ex)}"
                                     }
                                 }
                                 onRefreshFeed()
@@ -1053,6 +1192,8 @@ fun MainContainerScreen(
                         }
 
                         Toast.makeText(context, "Ad published successfully!", Toast.LENGTH_SHORT).show()
+                        AdDraftStore.clear()
+                        AdDraftStore.saveDraft(context)
                         showPostAdDialog = false
                         activeTab = "home"
                     }
@@ -1061,6 +1202,7 @@ fun MainContainerScreen(
         }
     }
 }
+}
 
 // --- Home Tab Content with filters ---
 @Composable
@@ -1068,20 +1210,28 @@ fun HomeScreenContent(
     products: List<Product>,
     savedProductIds: List<String>,
     onProductClick: (String) -> Unit,
-    onRefreshFeed: () -> Unit
+    onRefreshFeed: () -> Unit,
+    onSearchClick: () -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var showConnectionDialog by remember { mutableStateOf(false) }
     var showCitySelectorHome by remember { mutableStateOf(false) }
     var selectedCityHomeFilter by remember { mutableStateOf("Ethiopia (All)") }
+    var selectedSortHome by remember { mutableStateOf("Newest") }
 
-    val filteredProducts = products.filter { product ->
-        val matchesSearch = product.title.contains(searchQuery, ignoreCase = true) ||
-                            product.description.contains(searchQuery, ignoreCase = true)
-        val matchesCategory = selectedCategoryId == null || product.categoryId == selectedCategoryId
-        val matchesCity = if (selectedCityHomeFilter == "Ethiopia (All)") true else product.location.contains(selectedCityHomeFilter, ignoreCase = true)
-        matchesSearch && matchesCategory && matchesCity
+    val filteredProducts = remember(products, selectedCategoryId, selectedCityHomeFilter, selectedSortHome) {
+        var list = products.filter { product ->
+            val matchesCategory = selectedCategoryId == null || product.categoryId == selectedCategoryId
+            val matchesCity = if (selectedCityHomeFilter == "Ethiopia (All)") true else product.location.contains(selectedCityHomeFilter, ignoreCase = true)
+            matchesCategory && matchesCity
+        }
+        list = when (selectedSortHome) {
+            "Cheapest First" -> list.sortedBy { it.price.replace("[^\\d]".toRegex(), "").toDoubleOrNull() ?: 0.0 }
+            "Highest Price" -> list.sortedByDescending { it.price.replace("[^\\d]".toRegex(), "").toDoubleOrNull() ?: 0.0 }
+            "Newest" -> list.sortedByDescending { it.id.toIntOrNull() ?: 0 }
+            else -> list
+        }
+        list
     }
 
     Column(
@@ -1129,30 +1279,35 @@ fun HomeScreenContent(
                     }
                 }
 
-                // Modern Search Text Field
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("search_input"),
-                    placeholder = { Text("Search 1.5M+ items on Vibro...", fontSize = 14.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent
-                    ),
+                // Modern Clickable Mock Search Bar that opens the dedicated Search Screen
+                Surface(
+                    onClick = onSearchClick,
                     shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("search_input")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Search 1.5M+ items, parts & brands...",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
 
             }
         }
@@ -1187,6 +1342,43 @@ fun HomeScreenContent(
             }
         }
 
+        // Horizontal Sort Options Row
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                "Newest" to "🆕 Newest",
+                "Cheapest First" to "💸 Cheapest First",
+                "Highest Price" to "💎 Highest Price"
+            ).forEach { (sortKey, label) ->
+                item {
+                    val isSelected = selectedSortHome == sortKey
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(20.dp)
+                            )
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent)
+                            .clickable { selectedSortHome = sortKey }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
         // Listings header bar
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -1194,7 +1386,7 @@ fun HomeScreenContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (selectedCategoryId != null || searchQuery.isNotEmpty()) "Search Results (${filteredProducts.size})" else "Trending Near You",
+                text = if (selectedCategoryId != null) "Search Results (${filteredProducts.size})" else "Trending Near You",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -1219,11 +1411,11 @@ fun HomeScreenContent(
                 }
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(2),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalItemSpacing = 8.dp,
                 modifier = Modifier.weight(1f)
             ) {
                 items(filteredProducts) { item ->
@@ -1239,43 +1431,78 @@ fun HomeScreenContent(
     }
 
     if (showCitySelectorHome) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showCitySelectorHome = false }) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp)
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showCitySelectorHome = false },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = { showCitySelectorHome = false }
+                    ),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Select City", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(bottom = 16.dp))
-                    
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            selectedCityHomeFilter = "Ethiopia (All)"
-                            showCitySelectorHome = false
-                        }.padding(vertical = 12.dp)
-                    ) {
-                        Text("Ethiopia (All)", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
-                    }
-                    
-                    HorizontalDivider()
-                    
-                    LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                        items(ethiopianCities) { city ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    selectedCityHomeFilter = city.name
-                                    showCitySelectorHome = false
-                                }.padding(vertical = 12.dp)
-                            ) {
-                                Text(city.name, style = MaterialTheme.typography.bodyLarge)
-                            }
-                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                Surface(
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.6f)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
+                        )
+                ) {
+                    Column(modifier = Modifier.padding(24.dp).navigationBarsPadding()) {
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                                .align(Alignment.CenterHorizontally)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text("Select City", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(bottom = 16.dp))
+                        
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                selectedCityHomeFilter = "Ethiopia (All)"
+                                showCitySelectorHome = false
+                            }.padding(vertical = 12.dp)
+                        ) {
+                            Text("Ethiopia (All)", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { showCitySelectorHome = false }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Close")
+                        
+                        HorizontalDivider()
+                        
+                        LazyColumn(modifier = Modifier.weight(1f)) {
+                            items(ethiopianCities) { city ->
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        selectedCityHomeFilter = city.name
+                                        showCitySelectorHome = false
+                                    }.padding(vertical = 12.dp)
+                                ) {
+                                    Text(city.name, style = MaterialTheme.typography.bodyLarge)
+                                }
+                                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { showCitySelectorHome = false }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Close")
+                        }
                     }
                 }
             }
@@ -1287,123 +1514,174 @@ fun HomeScreenContent(
         var inputKey by remember { mutableStateOf(NetworkManager.customSupabaseAnonKey.ifEmpty { NetworkManager.supabaseAnonKey }) }
         val context = LocalContext.current
 
-        AlertDialog(
+        androidx.compose.ui.window.Dialog(
             onDismissRequest = { showConnectionDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Cloud,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Supabase Sync Settings")
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = { showConnectionDialog = false }
+                    ),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.75f)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
+                        )
                 ) {
-                    Text(
-                        text = "If your environment credentials are not synced, you can view or enter your Supabase URL and Anon Key below to establish a direct sandbox synchronization connection.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    OutlinedTextField(
-                        value = inputUrl,
-                        onValueChange = { inputUrl = it },
-                        label = { Text("Supabase URL") },
-                        placeholder = { Text("https://your-project.supabase.co") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = inputKey,
-                        onValueChange = { inputKey = it },
-                        label = { Text("Supabase Anon Key") },
-                        placeholder = { Text("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...") },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 3
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .padding(24.dp)
+                            .navigationBarsPadding()
+                            .verticalScroll(rememberScrollState())
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
-                                .background(
-                                    if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFF137333) else Color(0xFFB06000),
-                                    CircleShape
-                                )
+                                .width(40.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                                .align(Alignment.CenterHorizontally)
                         )
-                        Text(
-                            text = if (NetworkManager.isSupabaseConfigured) {
-                                if (NetworkManager.syncErrorMessage == null) "Status: Configuration Active & Synced (${NetworkManager.syncItemCount} remote items)" else "Status: Configured but Sync Failed"
-                            } else "Status: Inactive/Offline Sandbox",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFF137333) else Color(0xFFB06000)
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    if (NetworkManager.syncErrorMessage != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Cloud,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Supabase Sync Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Text(
-                            text = "Error: ${NetworkManager.syncErrorMessage}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            text = "If your environment credentials are not synced, you can view or enter your Supabase URL and Anon Key below to establish a direct sandbox synchronization connection.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = inputUrl,
+                            onValueChange = { inputUrl = it },
+                            label = { Text("Supabase URL") },
+                            placeholder = { Text("https://your-project.supabase.co") },
+                            singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                    }
-                }
-            },
-            confirmButton = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(
-                        onClick = {
-                            NetworkManager.clearConfig(context)
-                            inputUrl = ""
-                            inputKey = ""
-                            onRefreshFeed()
-                            showConnectionDialog = false
-                            Toast.makeText(context, "Reset to environment variables defaults", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Reset to Env")
-                    }
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Row {
-                        TextButton(onClick = { showConnectionDialog = false }) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                if (inputUrl.isNotBlank() && inputKey.isNotBlank()) {
-                                    NetworkManager.saveConfig(context, inputUrl, inputKey)
-                                    onRefreshFeed()
-                                    showConnectionDialog = false
-                                    Toast.makeText(context, "Saved & Syncing...", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Please fill in both fields", Toast.LENGTH_SHORT).show()
-                                }
-                            }
+                        OutlinedTextField(
+                            value = inputKey,
+                            onValueChange = { inputKey = it },
+                            label = { Text("Supabase Anon Key") },
+                            placeholder = { Text("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Save & Sync")
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFF137333) else Color(0xFFB06000),
+                                        CircleShape
+                                    )
+                            )
+                            Text(
+                                text = if (NetworkManager.isSupabaseConfigured) {
+                                    if (NetworkManager.syncErrorMessage == null) "Status: Configuration Active & Synced (${NetworkManager.syncItemCount} remote items)" else "Status: Configured but Sync Failed"
+                                } else "Status: Inactive/Offline Sandbox",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (NetworkManager.isSupabaseConfigured && NetworkManager.syncErrorMessage == null) Color(0xFF137333) else Color(0xFFB06000)
+                            )
+                        }
+
+                        if (NetworkManager.syncErrorMessage != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Error: ${NetworkManager.syncErrorMessage}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (inputUrl.isNotBlank() && inputKey.isNotBlank()) {
+                                        NetworkManager.saveConfig(context, inputUrl, inputKey)
+                                        onRefreshFeed()
+                                        showConnectionDialog = false
+                                        Toast.makeText(context, "Saved & Syncing...", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Please fill in both fields", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Save & Sync")
+                            }
+
+                            OutlinedButton(
+                                onClick = { showConnectionDialog = false },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                            onClick = {
+                                NetworkManager.clearConfig(context)
+                                inputUrl = ""
+                                inputKey = ""
+                                onRefreshFeed()
+                                showConnectionDialog = false
+                                Toast.makeText(context, "Reset to environment variables defaults", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Reset to Env Defaults")
                         }
                     }
                 }
             }
-        )
+        }
     }
 }
 
@@ -1537,6 +1815,9 @@ fun ChatsScreenContent(
     var writeMsgText by remember { mutableStateOf("") }
 
     if (activeThread != null) {
+        androidx.activity.compose.BackHandler {
+            activeThread = null
+        }
         val curThread = threads.find { it.id == activeThread?.id } ?: activeThread!!
 
         Column(
@@ -1732,7 +2013,9 @@ fun ProfileScreenContent(
     sellerReviews: List<Review>,
     onAddReview: (reviewerName: String, rating: Int, comment: String) -> Unit,
     onPostAdClick: () -> Unit = {},
-    onManualCheckForUpdates: () -> Unit = {}
+    onManualCheckForUpdates: () -> Unit = {},
+    currentThemeMode: String = "system",
+    onThemeModeChange: (String) -> Unit = {}
 ) {
     var activeSubScreen by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -1906,7 +2189,9 @@ fun ProfileScreenContent(
                                 onCurrencyChange = { currentCurrencyOption = it },
                                 currentMeetupMode = currentMeetupMode,
                                 onMeetupModeChange = { currentMeetupMode = it },
-                                onDismiss = { activeSubScreen = null }
+                                onDismiss = { activeSubScreen = null },
+                                currentThemeMode = currentThemeMode,
+                                onThemeModeChange = onThemeModeChange
                             )
                         }
                         "security" -> {
@@ -2113,159 +2398,6 @@ fun ProfileScreenContent(
 // --- Profile Sub-Dialogs implementations ---
 
 @Composable
-fun EditAdDialog(
-    product: Product,
-    onDismiss: () -> Unit,
-    onSave: (title: String, price: String, categoryId: String, location: String, condition: String, description: String, imageUrl: String) -> Unit
-) {
-    var title by remember { mutableStateOf(product.title) }
-    var price by remember { mutableStateOf(product.price.replace("[^\\d]".toRegex(), "")) }
-    var categoryId by remember { mutableStateOf(product.categoryId) }
-    var location by remember { mutableStateOf(product.location) }
-    var condition by remember { mutableStateOf(product.condition) }
-    var description by remember { mutableStateOf(product.description) }
-    var imageUrl by remember { mutableStateOf(product.imageUrl) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    text = "Edit Your Listing",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                // Title
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
-
-                // Price
-                OutlinedTextField(
-                    value = price,
-                    onValueChange = { price = it },
-                    label = { Text("Price (Birr)") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
-
-                // Category
-                Text("Category", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val categories = listOf(
-                        "1" to "Vehicles",
-                        "2" to "Phones",
-                        "3" to "Property",
-                        "4" to "Fashion",
-                        "5" to "Furniture"
-                    )
-                    categories.forEach { (id, name) ->
-                        val selected = categoryId == id
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { categoryId = id }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(name, color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                // Condition
-                Text("Condition", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val conditions = listOf("New", "Used - Like New", "Used - Good", "Used - Fair")
-                    conditions.forEach { cond ->
-                        val selected = condition == cond
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { condition = cond }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(cond.substringAfter(" - "), color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                // Location
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text("Location (e.g. Addis Ababa, Bole)") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
-
-                // Image URL
-                OutlinedTextField(
-                    value = imageUrl,
-                    onValueChange = { imageUrl = it },
-                    label = { Text("Image URL") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
-
-                // Description
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-                )
-
-                // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Button(onClick = {
-                        if (title.isBlank() || price.isBlank() || location.isBlank()) {
-                            return@Button
-                        }
-                        onSave(title, price, categoryId, location, condition, description, imageUrl)
-                    }) {
-                        Text("Save Changes")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun ProfileListingsPageContent(
     products: MutableList<Product>,
     onProductClick: (String) -> Unit,
@@ -2338,10 +2470,10 @@ fun ProfileListingsPageContent(
 
             if (editingProduct != null) {
                 val currentEditingProd = editingProduct!!
-                EditAdDialog(
-                    product = currentEditingProd,
+                PostAdDialog(
+                    editingProduct = currentEditingProd,
                     onDismiss = { editingProduct = null },
-                    onSave = { title, price, categoryId, location, condition, description, imageUrl ->
+                    onPublish = { title, price, categoryId, location, condition, description, imageUrl, isPromoted ->
                         val cleanPriceNum = price.replace("[^\\d]".toRegex(), "")
                         val formattedPrice = "Br " + if (cleanPriceNum.isNotEmpty()) {
                             String.format("%,d", cleanPriceNum.toLong())
@@ -2359,7 +2491,8 @@ fun ProfileListingsPageContent(
                             location = location,
                             condition = condition,
                             description = description,
-                            imageUrl = finalImgUrl
+                            imageUrl = finalImgUrl,
+                            isPromoted = isPromoted
                         )
 
                         val globalIndex = products.indexOfFirst { it.id == currentEditingProd.id }
@@ -2938,7 +3071,9 @@ fun ProfileSettingsPageContent(
     onCurrencyChange: (String) -> Unit,
     currentMeetupMode: Boolean,
     onMeetupModeChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currentThemeMode: String = "system",
+    onThemeModeChange: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var tempNotification by remember { mutableStateOf(currentNotification) }
@@ -2946,6 +3081,7 @@ fun ProfileSettingsPageContent(
     var tempMeetupMode by remember { mutableStateOf(currentMeetupMode) }
     var tempSelectedCity by remember { mutableStateOf(userCity) }
     var showCityDropdown by remember { mutableStateOf(false) }
+    var tempThemeMode by remember { mutableStateOf(currentThemeMode) }
 
     val addisNeighborhoods = listOf(
         "Bole, Addis Ababa",
@@ -3037,6 +3173,41 @@ fun ProfileSettingsPageContent(
 
         HorizontalDivider()
 
+        Column {
+            Text("App Theme Color Mode", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "system" to "⚡ System",
+                    "light" to "☀️ Light",
+                    "dark" to "🌙 Dark"
+                ).forEach { (mode, label) ->
+                    val isSelected = tempThemeMode == mode
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .clickable { tempThemeMode = mode }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider()
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -3089,6 +3260,7 @@ fun ProfileSettingsPageContent(
                     onNotificationChange(tempNotification)
                     onCurrencyChange(tempCurrency)
                     onMeetupModeChange(tempMeetupMode)
+                    onThemeModeChange(tempThemeMode)
                     if (tempSelectedCity != userCity) {
                         onUpdateLocation(tempSelectedCity)
                     }
@@ -3506,26 +3678,87 @@ fun SellerReviewsDialog(
     onAddReview: (reviewerName: String, rating: Int, comment: String) -> Unit
 ) {
     if (!visible) return
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("Reviews for $sellerName", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-        },
-        text = {
-            Box(modifier = Modifier.heightIn(max = 480.dp)) {
-                SellerReviewsPageContent(
-                    sellerName = sellerName,
-                    sellerReviews = sellerReviews,
-                    onAddReview = onAddReview
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Surface(
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.75f)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .navigationBarsPadding()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                            .align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Reviews for $sellerName", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Close Reviews")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        SellerReviewsPageContent(
+                            sellerName = sellerName,
+                            sellerReviews = sellerReviews,
+                            onAddReview = onAddReview
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Close", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -3694,7 +3927,8 @@ fun ProductDetailScreen(
     sellerReviews: List<Review>,
     onAddReview: (reviewerName: String, rating: Int, comment: String) -> Unit,
     onUpdateProduct: (Product) -> Unit = {},
-    onDeleteProduct: (Product) -> Unit = {}
+    onDeleteProduct: (Product) -> Unit = {},
+    onSellerClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var activeReadingArticle by remember { mutableStateOf<VibroArticle?>(null) }
@@ -3714,114 +3948,146 @@ fun ProductDetailScreen(
 
     if (activeReadingArticle != null) {
         val article = activeReadingArticle!!
-        Dialog(onDismissRequest = { activeReadingArticle = null }) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
+        Dialog(
+            onDismissRequest = { activeReadingArticle = null },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = { activeReadingArticle = null }
+                    ),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Column(
+                Surface(
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
-                        .padding(24.dp)
                         .fillMaxWidth()
+                        .fillMaxHeight(0.75f)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = {}
+                        )
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = article.icon,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Safe Buying Guide",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = article.rTime,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        IconButton(onClick = { activeReadingArticle = null }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close Article")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = article.title,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(12.dp))
-
                     Column(
                         modifier = Modifier
-                            .weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState())
+                            .padding(24.dp)
+                            .navigationBarsPadding()
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                                .align(Alignment.CenterHorizontally)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = article.icon,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Safe Buying Guide",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = article.rTime,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { activeReadingArticle = null }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close Article")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         Text(
-                            text = article.fullContent,
-                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                            text = article.title,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Row(
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.Top
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState())
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Never send money or compromise safety. Conduct transactions in busy public spots and verify properties thoroughly.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                text = article.fullContent,
+                                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Never send money or compromise safety. Conduct transactions in busy public spots and verify properties thoroughly.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                    Button(
-                        onClick = { activeReadingArticle = null },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("I Understand, Got It", fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = { activeReadingArticle = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("I Understand, Got It", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -3881,16 +4147,41 @@ fun ProductDetailScreen(
                     .fillMaxWidth()
                     .height(240.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { showFullScreenPhotoViewer = true }
             ) {
-                AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = product.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    error = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(product.categoryId, product.title)),
-                    placeholder = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(product.categoryId, product.title))
-                )
+                val images = getProductImages(product)
+                val pagerState = rememberPagerState(pageCount = { images.size })
+                
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    AsyncImage(
+                        model = images[page],
+                        contentDescription = "${product.title} Image ${page + 1}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clickable { showFullScreenPhotoViewer = true },
+                        error = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(product.categoryId, product.title)),
+                        placeholder = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(product.categoryId, product.title))
+                    )
+                }
+
+                if (images.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        repeat(images.size) { i ->
+                            Box(
+                                modifier = Modifier
+                                    .size(if (pagerState.currentPage == i) 8.dp else 6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (pagerState.currentPage == i) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f))
+                            )
+                        }
+                    }
+                }
 
                 if (product.isPromoted) {
                     Box(
@@ -3953,7 +4244,7 @@ fun ProductDetailScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showSellerReviewsDialog = true }
+                        .clickable { onSellerClick(product.sellerName) }
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -4005,130 +4296,6 @@ fun ProductDetailScreen(
                         onAddReview(reviewerName, rating, comment)
                     }
                 )
-
-                // RELATED ARTICLES & USER SAFETY GUIDES
-                val catArticles = mockArticlesByCat[product.categoryId] ?: emptyList()
-                if (catArticles.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(18.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Buying Guides & Advisor Articles",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Text(
-                        text = "Expert tips verified by Vibro safety team specifically for " +
-                           (mockCategories.find { it.id == product.categoryId }?.name ?: "this category") + ".",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        catArticles.forEach { article ->
-                            Card(
-                                modifier = Modifier
-                                    .width(260.dp)
-                                    .clickable { activeReadingArticle = article }
-                                    .testTag("article_${article.id}"),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = article.icon,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = article.rTime,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    Text(
-                                        text = article.title,
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    Text(
-                                        text = article.excerpt,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        lineHeight = 16.sp
-                                    )
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = "Tap to read full guide →",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
 
                 // RELATED ADS
                 val relatedProducts = remember(product, products) {
@@ -4315,10 +4482,10 @@ fun ProductDetailScreen(
 
         if (showEditDialog) {
             var currentProductState by remember { mutableStateOf(product) }
-            EditAdDialog(
-                product = currentProductState,
+            PostAdDialog(
+                editingProduct = currentProductState,
                 onDismiss = { showEditDialog = false },
-                onSave = { title, price, categoryId, location, condition, description, imageUrl ->
+                onPublish = { title, price, categoryId, location, condition, description, imageUrl, isPromoted ->
                     val cleanPriceNum = price.replace("[^\\d]".toRegex(), "")
                     val formattedPrice = "Br " + if (cleanPriceNum.isNotEmpty()) {
                         String.format("%,d", cleanPriceNum.toLong())
@@ -4336,7 +4503,8 @@ fun ProductDetailScreen(
                         location = location,
                         condition = condition,
                         description = description,
-                        imageUrl = finalImgUrl
+                        imageUrl = finalImgUrl,
+                        isPromoted = isPromoted
                     )
 
                     onUpdateProduct(updatedProd)
@@ -4377,10 +4545,19 @@ fun ProductGridCard(
     product: Product,
     onClick: () -> Unit
 ) {
+    val itemAspectRatio = remember(product.id) {
+        val hash = product.id.hashCode()
+        when (Math.abs(hash) % 3) {
+            0 -> 0.8f // Taller
+            1 -> 1.0f // Square
+            else -> 1.2f // Wider
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(190.dp)
+            .wrapContentHeight()
             .clickable(onClick = onClick)
             .testTag("product_card_${product.id}"),
         shape = RoundedCornerShape(12.dp),
@@ -4390,7 +4567,7 @@ fun ProductGridCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .aspectRatio(itemAspectRatio)
                     .clip(RoundedCornerShape(8.dp))
             ) {
                 AsyncImage(
@@ -4414,7 +4591,7 @@ fun ProductGridCard(
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(product.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(product.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(product.price, fontSize = 13.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4547,6 +4724,7 @@ fun SelectFieldRow(
 // --- Sell Screen Dialog slide sheet code ---
 @Composable
 fun PostAdDialog(
+    editingProduct: Product? = null,
     onDismiss: () -> Unit,
     onPublish: (title: String, price: String, categoryId: String, location: String, condition: String, description: String, imageUrl: String, isPromoted: Boolean) -> Unit
 ) {
@@ -4561,8 +4739,15 @@ fun PostAdDialog(
     // Step 7: Automated Moderation & Review Animation
 
     var wizardStep by rememberSaveable { mutableStateOf(1) }
-    var categoryId by rememberSaveable { mutableStateOf("2") } // Defaults to Phones
-    var subcategory by rememberSaveable { mutableStateOf("Mobile Phones") }
+    var categoryId by rememberSaveable { mutableStateOf(editingProduct?.categoryId ?: AdDraftStore.getString("categoryId", "2")) } // Defaults to Phones
+    var subcategory by rememberSaveable { 
+        mutableStateOf(
+            editingProduct?.description?.let { desc ->
+                Regex("📂 (.*?)\n").find(desc)?.groupValues?.get(1)?.trim()
+                    ?: Regex("🌐 Category: .* \\((.*)\\)").find(desc)?.groupValues?.get(1)?.trim()
+            } ?: AdDraftStore.getString("subcategory", "Mobile Phones")
+        )
+    }
 
     // Navigation and Selector views inside the wizard steps
     var currentSubView by rememberSaveable { mutableStateOf("main") } // "main", "select_category", "select_subcategory", "selector"
@@ -4574,64 +4759,79 @@ fun PostAdDialog(
 
     // Dynamic Specifications States
     // Vehicles (ID "1")
-    var vehicleBrand by rememberSaveable { mutableStateOf("") }
-    var vehicleModel by rememberSaveable { mutableStateOf("") }
-    var vehicleYear by rememberSaveable { mutableStateOf("") }
-    var vehicleTransmission by rememberSaveable { mutableStateOf("Automatic") }
-    var vehicleFuel by rememberSaveable { mutableStateOf("Petrol") }
+    var vehicleBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🚘 Brand: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("vehicleBrand", "")) }
+    var vehicleModel by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("📋 Model: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("vehicleModel", "")) }
+    var vehicleYear by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("📅 Year: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("vehicleYear", "")) }
+    var vehicleTransmission by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("⚙️ Transmission: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("vehicleTransmission", "Automatic")) }
+    var vehicleFuel by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("⛽ Fuel: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("vehicleFuel", "Petrol")) }
 
     // Phones (ID "2")
-    var phoneBrand by rememberSaveable { mutableStateOf("") }
-    var phoneStorage by rememberSaveable { mutableStateOf("") }
-    var phoneRam by rememberSaveable { mutableStateOf("") }
-    var phoneColor by rememberSaveable { mutableStateOf("") }
+    var phoneBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("📱 Brand: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("phoneBrand", "")) }
+    var phoneStorage by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("💾 Storage: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("phoneStorage", "")) }
+    var phoneRam by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("⚡ RAM: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("phoneRam", "")) }
+    var phoneColor by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🎨 Color: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("phoneColor", "")) }
 
     // Property (ID "3")
-    var propertyBedrooms by rememberSaveable { mutableStateOf("") }
-    var propertyBathrooms by rememberSaveable { mutableStateOf("") }
-    var propertyFurnishing by rememberSaveable { mutableStateOf("Unfurnished") }
+    var propertyBedrooms by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🛏️ Bedrooms: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("propertyBedrooms", "")) }
+    var propertyBathrooms by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🚿 Bathrooms: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("propertyBathrooms", "")) }
+    var propertyFurnishing by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🛋️ Furnishing: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("propertyFurnishing", "Unfurnished")) }
 
     // Fashion (ID "4")
-    var fashionGender by rememberSaveable { mutableStateOf("Unisex") }
-    var fashionSize by rememberSaveable { mutableStateOf("") }
-    var fashionBrand by rememberSaveable { mutableStateOf("") }
+    var fashionGender by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🚻 Gender: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("fashionGender", "Unisex")) }
+    var fashionSize by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("📏 Size: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("fashionSize", "")) }
+    var fashionBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🏷️ Apparel Brand: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("fashionBrand", "")) }
 
     // Furniture (ID "5")
-    var furnitureMaterial by rememberSaveable { mutableStateOf("") }
-    var furnitureBrand by rememberSaveable { mutableStateOf("") }
+    var furnitureMaterial by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🪵 Material: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("furnitureMaterial", "")) }
+    var furnitureBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🏷️ Brand: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("furnitureBrand", "")) }
 
     // Electronics (ID "6")
-    var elecBrand by rememberSaveable { mutableStateOf("") }
-    var elecType by rememberSaveable { mutableStateOf("") }
+    var elecBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🏷️ Brand: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("elecBrand", "")) }
+    var elecType by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("💻 Device Type: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("elecType", "")) }
 
     // Health & Beauty (ID "7")
-    var beautyBrand by rememberSaveable { mutableStateOf("") }
-    var beautyType by rememberSaveable { mutableStateOf("") }
+    var beautyBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🌸 Brand/Line: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("beautyBrand", "")) }
+    var beautyType by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("💅 Product Type: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("beautyType", "")) }
 
     // Services (ID "8")
-    var serviceType by rememberSaveable { mutableStateOf("") }
-    var serviceExperience by rememberSaveable { mutableStateOf("") }
+    var serviceType by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🛠️ Service Offered: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("serviceType", "")) }
+    var serviceExperience by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("💼 Experience: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("serviceExperience", "")) }
 
     // Jobs (ID "9")
-    var jobType by rememberSaveable { mutableStateOf("") }
-    var jobExperience by rememberSaveable { mutableStateOf("") }
+    var jobType by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("💼 Job Type: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("jobType", "")) }
+    var jobExperience by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("📈 Required Experience: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("jobExperience", "")) }
 
     // Animals & Pets (ID "10")
-    var petType by rememberSaveable { mutableStateOf("") }
-    var petAge by rememberSaveable { mutableStateOf("") }
+    var petType by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🐾 Pet Type: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("petType", "")) }
+    var petAge by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🎂 Age/Stage: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("petAge", "")) }
 
     // Agriculture & Food (ID "11")
-    var agriType by rememberSaveable { mutableStateOf("") }
-    var agriUnit by rememberSaveable { mutableStateOf("") }
+    var agriType by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🌾 Produce/Tool Type: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("agriType", "")) }
+    var agriUnit by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("⚖️ Unit of Sale: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("agriUnit", "")) }
+
+    // Universal Extra Attributes states to support highly specific items, brands, and parts
+    var extraSpecificBrand by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("🏷️ Specific Brand: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("extraSpecificBrand", "")) }
+    var extraSpecificPartName by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("⚙️ Specific Part/Sub-item: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("extraSpecificPartName", "")) }
+    var extraSpecificModel by rememberSaveable { mutableStateOf(editingProduct?.description?.let { Regex("📋 Model/Version: (.*)").find(it)?.groupValues?.get(1)?.trim() } ?: AdDraftStore.getString("extraSpecificModel", "")) }
 
     // Core attributes
-    var title by rememberSaveable { mutableStateOf("") }
-    var price by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf(editingProduct?.title ?: AdDraftStore.getString("title", "")) }
+    var price by rememberSaveable { mutableStateOf(editingProduct?.price?.replace("[^\\d]".toRegex(), "") ?: AdDraftStore.getString("price", "")) }
     var isNegotiable by rememberSaveable { mutableStateOf(true) }
-    var condition by rememberSaveable { mutableStateOf("New") }
-    var location by rememberSaveable { mutableStateOf("Addis Ababa, Bole") }
-    var imageUrl by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
+    var condition by rememberSaveable { mutableStateOf(editingProduct?.condition ?: AdDraftStore.getString("condition", "New")) }
+    var location by rememberSaveable { mutableStateOf(editingProduct?.location ?: AdDraftStore.getString("location", "Addis Ababa, Bole")) }
+    var imageUrl by rememberSaveable { mutableStateOf(editingProduct?.imageUrl ?: AdDraftStore.getString("imageUrl", "")) }
+    var description by rememberSaveable { 
+        mutableStateOf(
+            editingProduct?.description?.let { desc ->
+                if (desc.contains("📝 AD DESCRIPTION:\n")) {
+                    desc.substringAfter("📝 AD DESCRIPTION:\n")
+                } else if (!desc.contains("📌 SPECIFICATIONS:\n")) {
+                    desc
+                } else ""
+            } ?: AdDraftStore.getString("description", "")
+        )
+    }
 
     // Communication settings (Step 5)
     var showPhoneNumber by rememberSaveable { mutableStateOf(true) }
@@ -4640,6 +4840,8 @@ fun PostAdDialog(
 
     // Premium Boost Tier: "free", "silver", "diamond"
     var selectedPremiumTier by rememberSaveable { mutableStateOf("silver") }
+    var showPaymentScreen by rememberSaveable { mutableStateOf(false) }
+    var paymentReferenceCode by rememberSaveable { mutableStateOf("") }
 
     // Constants Lists
     val vehicleSubs = listOf(
@@ -4702,31 +4904,31 @@ fun PostAdDialog(
         "Horticulture & Ornamental Plants", "Organic Foods", "Butchery & Meat Products", "Spices & Condiments"
     )
 
-    val carBrands = listOf("Toyota", "Hyundai", "Suzuki", "Mercedes-Benz", "BYD", "Lifan", "Nissan", "Ford", "Honda", "BMW", "Audi", "Chevrolet", "Kia", "Mitsubishi", "Peugeot", "Volkswagen", "Isuzu")
-    val phoneBrands = listOf("Apple", "Samsung", "Xiaomi", "Tecno", "Infinix", "Google", "Huawei", "Oppo", "Vivo", "OnePlus", "Realme", "Nokia", "Motorola", "Itel")
-    val storageOptions = listOf("16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB")
-    val ramOptions = listOf("2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB", "24GB")
+    val carBrands = listOf("Toyota", "Hyundai", "Suzuki", "Mercedes-Benz", "BYD", "Lifan", "Nissan", "Ford", "Honda", "BMW", "Audi", "Chevrolet", "Kia", "Mitsubishi", "Peugeot", "Volkswagen", "Isuzu", "Tesla", "Mazda", "Subaru", "Lexus", "Volvo", "Land Rover", "Jeep", "Chery", "Jetour", "Geely", "Changan", "Dongfeng")
+    val phoneBrands = listOf("Apple", "Samsung", "Xiaomi", "Tecno", "Infinix", "Google", "Huawei", "Oppo", "Vivo", "OnePlus", "Realme", "Nokia", "Motorola", "Itel", "ZTE", "Sony", "Asus", "Lenovo", "Honor", "Meizu")
+    val storageOptions = listOf("16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB")
+    val ramOptions = listOf("2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB", "24GB", "32GB", "64GB")
     val bedroomOptions = listOf("Studio", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10+")
     val bathroomOptions = listOf("1", "2", "3", "4", "5", "6+")
     val furnishingOptions = listOf("Furnished", "Unfurnished", "Semi-Furnished")
     val fashionGenders = listOf("Men's", "Women's", "Unisex", "Kids Boy", "Kids Girl")
-    val furnitureMaterials = listOf("Wood", "Leather", "Fabric", "Metal", "Glass", "Plastic", "Bamboo", "Marble")
-
-    val electronicBrands = listOf("HP", "Dell", "Lenovo", "Apple", "Sony", "Samsung", "Canon", "LG", "Xiaomi", "Asus", "Acer", "Toshiba", "Nikon", "Panasonic", "JBL", "Bose")
-    val electronicTypes = listOf("Laptop", "Television", "Smartphone", "Camera", "Audio & Speaker", "Video Games & Consoles", "Desktop PC", "Smartwatch", "Tablet", "Projector", "Headphone")
-    val beautyBrands = listOf("Nivea", "CeraVe", "Dior", "Chanel", "MAC", "Fenty Beauty", "The Ordinary", "Colgate", "Gillette", "L'Oreal", "Vaseline", "Estee Lauder")
-    val beautyTypes = listOf("Skincare", "Makeup", "Fragrance", "Haircare", "Personal Care", "Cosmetics", "Nutritional Supplements", "Salon Equipment")
-    val serviceTypesList = listOf("Home Appliance Repair", "House Cleaning", "Cargo & Moving", "Home Tutor", "Beauty Salon Service", "Car Rent & Transport", "Web Development", "Plumbing & Electrical", "Legal Consulting", "Painting & Renovation")
+    val furnitureMaterials = listOf("Wood", "Leather", "Fabric", "Metal", "Glass", "Plastic", "Bamboo", "Marble", "Steel", "Oak", "Mahogany", "Pine", "Rattan", "Walnut", "Synthetic Leather")
+ 
+    val electronicBrands = listOf("HP", "Dell", "Lenovo", "Apple", "Sony", "Samsung", "Canon", "LG", "Xiaomi", "Asus", "Acer", "Toshiba", "Nikon", "Panasonic", "JBL", "Bose", "MSI", "Gigabyte", "Razer", "Epson", "HP Enterprise", "Logitech", "Philips", "Hisense", "TCL")
+    val electronicTypes = listOf("Laptop", "Television", "Smartphone", "Camera", "Audio & Speaker", "Video Games & Consoles", "Desktop PC", "Smartwatch", "Tablet", "Projector", "Headphone", "Printer & Scanner", "CCTV & Security", "Networking Router")
+    val beautyBrands = listOf("Nivea", "CeraVe", "Dior", "Chanel", "MAC", "Fenty Beauty", "The Ordinary", "Colgate", "Gillette", "L'Oreal", "Vaseline", "Estee Lauder", "Clinique", "Maybelline", "Neutrogena", "Dove", "Olay", "Pantene", "Head & Shoulders")
+    val beautyTypes = listOf("Skincare", "Makeup", "Fragrance", "Haircare", "Personal Care", "Cosmetics", "Nutritional Supplements", "Salon Equipment", "Oral Care", "Medical Supplies")
+    val serviceTypesList = listOf("Home Appliance Repair", "House Cleaning", "Cargo & Moving", "Home Tutor", "Beauty Salon Service", "Car Rent & Transport", "Web Development", "Plumbing & Electrical", "Legal Consulting", "Painting & Renovation", "Event Catering", "Tax & Accounting", "Graphic Design & Logo")
     val serviceExperiences = listOf("Under 1 Year", "1-3 Years", "3-5 Years", "5-10 Years", "10+ Years")
     val jobTypesList = listOf("Full-time", "Part-time", "Contract / Project", "Internship", "Freelance", "Commission")
     val jobExperiences = listOf("Entry Level / No Experience", "1-2 Years", "3-5 Years", "5-10 Years", "10+ Years")
-    val petTypesList = listOf("Dogs", "Cats", "Birds", "Fish", "Pet Accessories", "Rabbits", "Poultry", "Horses", "Veterinary Services")
+    val petTypesList = listOf("Dogs", "Cats", "Birds", "Fish", "Pet Accessories", "Rabbits", "Poultry", "Horses", "Veterinary Services", "Hamsters", "Lizards & Reptiles")
     val petAges = listOf("Baby / Puppy / Kitten", "Young Adult", "Mature Adult", "Senior")
-    val agriTypesList = listOf("Crop Seeds & Grains", "Fertilizer & Soil", "Farm Tractor & Tools", "Livestock & Poultry", "Pesticides & Chemicals", "Animal Feed", "Irrigation Systems")
+    val agriTypesList = listOf("Crop Seeds & Grains", "Fertilizer & Soil", "Farm Tractor & Tools", "Livestock & Poultry", "Pesticides & Chemicals", "Animal Feed", "Irrigation Systems", "Butchery & Fresh Meat", "Organic Fruits & Veg")
     val agriUnits = listOf("Per Kilogram", "Per Quintal / Bag", "Per Litre", "Per Item / Head", "Per Ton", "Per Acre", "Per Package")
-
-    val locations = listOf("Addis Ababa, Bole", "Addis Ababa, Kazanchis", "Addis Ababa, Piazza", "Addis Ababa, Sarbet", "Hawassa, Piassa")
-    val conditions = listOf("New", "Used - Like New", "Used - Good", "Used - Fair")
+ 
+    val locations = listOf("Addis Ababa, Bole", "Addis Ababa, Kazanchis", "Addis Ababa, Piazza", "Addis Ababa, Sarbet", "Addis Ababa, Megenagna", "Addis Ababa, Lebu", "Addis Ababa, Jeka", "Hawassa, Piassa", "Adama, Station", "Bahir Dar, Lakefront", "Dire Dawa, Kebele 02", "Gondar, Castle Side")
+    val conditions = listOf("New", "Used - Like New", "Used - Good", "Used - Fair", "Refurbished", "For Parts or Not Working")
 
     // Real-time local offline category prediction based on Title and Description
     val predictedCategory = remember(title, description) {
@@ -4812,9 +5014,155 @@ fun PostAdDialog(
         }
     }
 
+
+    DisposableEffect(Unit) {
+        onDispose {
+            if (editingProduct == null) {
+                AdDraftStore.data["categoryId"] = categoryId
+                AdDraftStore.data["subcategory"] = subcategory
+                AdDraftStore.data["title"] = title
+                AdDraftStore.data["price"] = price
+                AdDraftStore.data["condition"] = condition
+                AdDraftStore.data["location"] = location
+                AdDraftStore.data["imageUrl"] = imageUrl
+                AdDraftStore.data["description"] = description
+                
+                AdDraftStore.data["vehicleBrand"] = vehicleBrand
+                AdDraftStore.data["vehicleModel"] = vehicleModel
+                AdDraftStore.data["vehicleYear"] = vehicleYear
+                AdDraftStore.data["vehicleTransmission"] = vehicleTransmission
+                AdDraftStore.data["vehicleFuel"] = vehicleFuel
+                
+                AdDraftStore.data["phoneBrand"] = phoneBrand
+                AdDraftStore.data["phoneStorage"] = phoneStorage
+                AdDraftStore.data["phoneRam"] = phoneRam
+                AdDraftStore.data["phoneColor"] = phoneColor
+                
+                AdDraftStore.data["propertyBedrooms"] = propertyBedrooms
+                AdDraftStore.data["propertyBathrooms"] = propertyBathrooms
+                AdDraftStore.data["propertyFurnishing"] = propertyFurnishing
+                
+                AdDraftStore.data["fashionGender"] = fashionGender
+                AdDraftStore.data["fashionSize"] = fashionSize
+                AdDraftStore.data["fashionBrand"] = fashionBrand
+                
+                AdDraftStore.data["furnitureMaterial"] = furnitureMaterial
+                AdDraftStore.data["furnitureBrand"] = furnitureBrand
+                
+                AdDraftStore.data["elecBrand"] = elecBrand
+                AdDraftStore.data["elecType"] = elecType
+                
+                AdDraftStore.data["beautyBrand"] = beautyBrand
+                AdDraftStore.data["beautyType"] = beautyType
+                
+                AdDraftStore.data["serviceType"] = serviceType
+                AdDraftStore.data["serviceExperience"] = serviceExperience
+                
+                AdDraftStore.data["jobType"] = jobType
+                AdDraftStore.data["jobExperience"] = jobExperience
+                
+                AdDraftStore.data["petType"] = petType
+                AdDraftStore.data["petAge"] = petAge
+                
+                AdDraftStore.data["agriType"] = agriType
+                AdDraftStore.data["agriUnit"] = agriUnit
+                AdDraftStore.saveDraft(context)
+            }
+        }
+    }
+
+    val executePublishAd: (String) -> Unit = { referenceCode ->
+        val trimTitle = title.trim()
+        val trimPrice = price.trim()
+        val specsBuilder = StringBuilder()
+        specsBuilder.append("📂 $subcategory\n")
+
+        when (categoryId) {
+            "1" -> {
+                if (vehicleBrand.isNotEmpty()) specsBuilder.append("🚘 Brand: $vehicleBrand\n")
+                if (vehicleModel.isNotEmpty()) specsBuilder.append("📋 Model: $vehicleModel\n")
+                if (vehicleYear.isNotEmpty()) specsBuilder.append("📅 Year: $vehicleYear\n")
+                specsBuilder.append("⚙️ Transmission: $vehicleTransmission\n")
+                specsBuilder.append("⛽ Fuel: $vehicleFuel\n")
+            }
+            "2" -> {
+                if (phoneBrand.isNotEmpty()) specsBuilder.append("📱 Brand: $phoneBrand\n")
+                if (phoneStorage.isNotEmpty()) specsBuilder.append("💾 Storage: $phoneStorage\n")
+                if (phoneRam.isNotEmpty()) specsBuilder.append("⚡ RAM: $phoneRam\n")
+                if (phoneColor.isNotEmpty()) specsBuilder.append("🎨 Color: $phoneColor\n")
+            }
+            "3" -> {
+                if (propertyBedrooms.isNotEmpty()) specsBuilder.append("🛏️ Bedrooms: $propertyBedrooms\n")
+                if (propertyBathrooms.isNotEmpty()) specsBuilder.append("🚿 Bathrooms: $propertyBathrooms\n")
+                specsBuilder.append("🛋️ Furnishing: $propertyFurnishing\n")
+            }
+            "4" -> {
+                specsBuilder.append("🚻 Gender: $fashionGender\n")
+                if (fashionSize.isNotEmpty()) specsBuilder.append("📏 Size: $fashionSize\n")
+                if (fashionBrand.isNotEmpty()) specsBuilder.append("🏷️ Apparel Brand: $fashionBrand\n")
+            }
+            "5" -> {
+                if (furnitureMaterial.isNotEmpty()) specsBuilder.append("🪵 Material: $furnitureMaterial\n")
+                if (furnitureBrand.isNotEmpty()) specsBuilder.append("🏷️ Brand: $furnitureBrand\n")
+            }
+            "6" -> {
+                if (elecType.isNotEmpty()) specsBuilder.append("💻 Device Type: $elecType\n")
+                if (elecBrand.isNotEmpty()) specsBuilder.append("🏷️ Brand: $elecBrand\n")
+            }
+            "7" -> {
+                if (beautyType.isNotEmpty()) specsBuilder.append("💅 Product Type: $beautyType\n")
+                if (beautyBrand.isNotEmpty()) specsBuilder.append("🌸 Brand/Line: $beautyBrand\n")
+            }
+            "8" -> {
+                if (serviceType.isNotEmpty()) specsBuilder.append("🛠️ Service Offered: $serviceType\n")
+                if (serviceExperience.isNotEmpty()) specsBuilder.append("💼 Experience: $serviceExperience\n")
+            }
+            "9" -> {
+                if (jobType.isNotEmpty()) specsBuilder.append("👔 Job Type: $jobType\n")
+                if (jobExperience.isNotEmpty()) specsBuilder.append("🎓 Experience Required: $jobExperience\n")
+            }
+            "10" -> {
+                if (petType.isNotEmpty()) specsBuilder.append("🐶 Pet Type: $petType\n")
+                if (petAge.isNotEmpty()) specsBuilder.append("📅 Age Level: $petAge\n")
+            }
+            "11" -> {
+                if (agriType.isNotEmpty()) specsBuilder.append("🚜 Agriculture Type: $agriType\n")
+                if (agriUnit.isNotEmpty()) specsBuilder.append("📦 Measure Unit: $agriUnit\n")
+            }
+        }
+
+        if (extraSpecificBrand.isNotEmpty()) specsBuilder.append("🏷️ Specific Brand: $extraSpecificBrand\n")
+        if (extraSpecificPartName.isNotEmpty()) specsBuilder.append("⚙️ Specific Part/Sub-item: $extraSpecificPartName\n")
+        if (extraSpecificModel.isNotEmpty()) specsBuilder.append("📋 Model/Version: $extraSpecificModel\n")
+
+        if (referenceCode.isNotEmpty()) {
+            specsBuilder.append("💎 Premium Payment: Verified (Ref: $referenceCode)\n")
+        }
+
+        val finalDescription = if (specsBuilder.isNotEmpty()) {
+            val descPart = if (description.trim().isNotEmpty()) "\n\n📝 AD DESCRIPTION:\n" + description else ""
+            "📌 SPECIFICATIONS:\n" + specsBuilder.toString() + descPart
+        } else {
+            description
+        }
+
+        onPublish(
+            trimTitle,
+            trimPrice,
+            categoryId,
+            location,
+            condition,
+            finalDescription,
+            imageUrl,
+            selectedPremiumTier != "free"
+        )
+    }
+
     // Hardware Back gestures inside the Single Screen Form
     BackHandler(enabled = true) {
-        if (currentSubView != "main") {
+        if (showPaymentScreen) {
+            showPaymentScreen = false
+        } else if (currentSubView != "main") {
             currentSubView = "main"
         } else {
             onDismiss()
@@ -4838,11 +5186,139 @@ fun PostAdDialog(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
+            if (showPaymentScreen) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { showPaymentScreen = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Premium Transfer Payment Gate",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = if (selectedPremiumTier == "silver") "Silver Booster Package Active 🚀" else "Diamond Ultra VIP Package Active 💎",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (selectedPremiumTier == "silver") "Total Amount Due: 499 Birr" else "Total Amount Due: 1,299 Birr",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "To publish your premium listing, please transfer the exact amount above to one of our verified accounts below:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    // Account List
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // Account 1: CBE
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).background(Color(0xFF8B5CF6), CircleShape))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Commercial Bank of Ethiopia (CBE)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                Text("   Account Number: 1000776188801", fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 13.sp)
+                                Text("   Account Name: Vibro Marketplace Admin", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            // Account 2: Telebirr
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).background(Color(0xFF3B82F6), CircleShape))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Telebirr Mobile Payment", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                Text("   Mobile Number: 0994408678", fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 13.sp)
+                                Text("   Merchant Name: Vibro Market Support", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            // Account 3: Teleport Pay
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).background(Color(0xFF10B981), CircleShape))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Teleport Wallet Account", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                Text("   Teleport ID: TP-883921", fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 13.sp)
+                                Text("   Receiver: Vibro Telecom Group", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    // User Inputs Reference
+                    Text("Confirm Transfer Transaction Details", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(
+                        value = paymentReferenceCode,
+                        onValueChange = { paymentReferenceCode = it },
+                        label = { Text("Transfer Transaction Ref # or Sender Name") },
+                        placeholder = { Text("Example: TXN-49219293 or your full phone number") },
+                        modifier = Modifier.fillMaxWidth().testTag("payment_reference_input"),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            if (paymentReferenceCode.trim().isNotEmpty()) {
+                                executePublishAd(paymentReferenceCode.trim())
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("payment_confirm_button"),
+                        enabled = paymentReferenceCode.trim().isNotEmpty(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Verify Payment & Upload Ad")
+                    }
+
+                    OutlinedButton(
+                        onClick = { showPaymentScreen = false },
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        Text("Go Back & Edit Plan")
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
                 // Header Panel
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -4861,8 +5337,18 @@ fun PostAdDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    IconButton(onClick = {
+                        if (currentSubView != "main") {
+                            currentSubView = "main"
+                        } else {
+                            onDismiss()
+                        }
+                    }) {
+                        Icon(
+                            imageVector = if (currentSubView != "main") Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Close,
+                            contentDescription = if (currentSubView != "main") "Back" else "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -5131,6 +5617,54 @@ fun PostAdDialog(
                     ) {
                             // --- Form Section 1: Basic Information ---
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                val hasDraft = remember { title.isNotEmpty() || price.isNotEmpty() || imageUrl.isNotEmpty() || description.isNotEmpty() }
+                                if (editingProduct == null && hasDraft) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                Icon(
+                                                    imageVector = Icons.Default.EditNote,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text("Unfinished draft loaded", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                                                    Text("We restored your progress automatically.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    title = ""
+                                                    price = ""
+                                                    imageUrl = ""
+                                                    description = ""
+                                                    vehicleBrand = ""
+                                                    vehicleModel = ""
+                                                    vehicleYear = ""
+                                                    phoneBrand = ""
+                                                    propertyBedrooms = ""
+                                                    propertyBathrooms = ""
+                                                    AdDraftStore.clear()
+                                                    AdDraftStore.saveDraft(context)
+                                                }
+                                            ) {
+                                                Text("Reset", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Text(
                                     text = "1. Basic Details",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -5558,6 +6092,45 @@ fun PostAdDialog(
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+                            // --- Universal Extra Attributes Section ---
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    text = "Detailed Brand, Model or Part Specifications",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                OutlinedTextField(
+                                    value = extraSpecificBrand,
+                                    onValueChange = { extraSpecificBrand = it },
+                                    label = { Text("Specific Brand / Maker (e.g. Toyota, Sony, Custom)") },
+                                    modifier = Modifier.fillMaxWidth().testTag("extra_brand_input"),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = extraSpecificPartName,
+                                        onValueChange = { extraSpecificPartName = it },
+                                        label = { Text("Specific Part / Sub-item") },
+                                        placeholder = { Text("e.g. Battery, Screen, Engine") },
+                                        modifier = Modifier.weight(1f).testTag("extra_part_input"),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = extraSpecificModel,
+                                        onValueChange = { extraSpecificModel = it },
+                                        label = { Text("Model No. / Version") },
+                                        placeholder = { Text("e.g. Pro, v2, Edition") },
+                                        modifier = Modifier.weight(1f).testTag("extra_model_input"),
+                                        singleLine = true
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
                             // --- Form Section 3: Media & Pricing details ---
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(
@@ -5620,7 +6193,120 @@ fun PostAdDialog(
 
 
 
-                                // Image selection and upload systems removed as requested
+                                var isUploadingImage by remember { mutableStateOf(false) }
+                                val scopeLocal = rememberCoroutineScope()
+                                val contextLocal = LocalContext.current
+
+                                val imagePickerLauncher = rememberLauncherForActivityResult(
+                                    contract = ActivityResultContracts.GetContent()
+                                ) { uri ->
+                                    if (uri != null) {
+                                        scopeLocal.launch {
+                                            isUploadingImage = true
+                                            Toast.makeText(contextLocal, "Compressing selected photo...", Toast.LENGTH_SHORT).show()
+                                            try {
+                                                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { compressImageUri(contextLocal, uri) }
+                                                if (bytes != null) {
+                                                    val localDir = java.io.File(contextLocal.cacheDir, "local_uploads")
+                                                    if (!localDir.exists()) localDir.mkdirs()
+                                                    val localFile = java.io.File(localDir, "uploaded_${System.currentTimeMillis()}.jpg")
+                                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { localFile.writeBytes(bytes) }
+                                                    val localFileUri = "file://${localFile.absolutePath}"
+                                                    
+                                                    imageUrl = if (imageUrl.isEmpty()) localFileUri else "$imageUrl||$localFileUri"
+                                                    
+                                                    var uploadSuccessful = false
+                                                    if (NetworkManager.isSupabaseConfigured) {
+                                                        Toast.makeText(contextLocal, "Uploading to Supabase...", Toast.LENGTH_SHORT).show()
+                                                        val remoteUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { NetworkManager.uploadImageToSupabase(bytes, "uploaded_listing_${System.currentTimeMillis()}.jpg") }
+                                                        if (remoteUrl != null) {
+                                                            imageUrl = imageUrl.replace(localFileUri, remoteUrl)
+                                                            uploadSuccessful = true
+                                                            Toast.makeText(contextLocal, "Uploaded to Supabase Storage!", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                    
+                                                    if (!uploadSuccessful && NetworkManager.isImageKitConfigured) {
+                                                        Toast.makeText(contextLocal, "Uploading to ImageKit...", Toast.LENGTH_SHORT).show()
+                                                        val remoteUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { NetworkManager.uploadImageToImageKit(bytes, "uploaded_listing_${System.currentTimeMillis()}.jpg") }
+                                                        if (remoteUrl != null) {
+                                                            imageUrl = imageUrl.replace(localFileUri, remoteUrl)
+                                                            uploadSuccessful = true
+                                                            Toast.makeText(contextLocal, "Uploaded to ImageKit Cloud!", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                    
+                                                    if (!uploadSuccessful) {
+                                                        Toast.makeText(contextLocal, "Saved locally. Ready to publish!", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                Toast.makeText(contextLocal, "Error uploading photo: ${NetworkManager.getErrorMessage(e)}", Toast.LENGTH_LONG).show()
+                                            } finally {
+                                                isUploadingImage = false
+                                            }
+                                        }
+                                    }
+                                }
+
+                                val buttonText = when {
+                                    isUploadingImage -> "Uploading to Cloud..."
+                                    NetworkManager.isSupabaseConfigured -> "📸 Capture Image / Upload to Supabase"
+                                    NetworkManager.isImageKitConfigured -> "📸 Capture Image / Upload to ImageKit"
+                                    else -> "📸 Choose Image from Gallery"
+                                }
+
+                                Button(
+                                    onClick = { imagePickerLauncher.launch("image/*") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = !isUploadingImage
+                                ) {
+                                    Text(buttonText, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                }
+
+                                if (imageUrl.trim().isNotEmpty()) {
+                                    val urls = imageUrl.split("||").filter { it.isNotBlank() }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        urls.forEach { url ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(120.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                AsyncImage(
+                                                    model = url,
+                                                    contentDescription = "Uploaded Photo",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop,
+                                                    error = rememberAsyncImagePainter(model = "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=600")
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(4.dp)
+                                                        .size(28.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.Black.copy(alpha = 0.6f))
+                                                        .clickable {
+                                                            imageUrl = urls.filter { it != url }.joinToString("||")
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // Description box
                                 OutlinedTextField(
@@ -5917,12 +6603,10 @@ fun PostAdDialog(
                                     val trimTitle = title.trim()
                                     val trimPrice = price.trim()
                                     val specsBuilder = StringBuilder()
+                                    specsBuilder.append("📂 $subcategory\n")
 
                                     when (categoryId) {
                                         "1" -> {
-                                            specsBuilder.append("🌐 Category: Vehicles (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (vehicleBrand.isNotEmpty()) specsBuilder.append("🚘 Brand: $vehicleBrand\n")
                                             if (vehicleModel.isNotEmpty()) specsBuilder.append("📋 Model: $vehicleModel\n")
                                             if (vehicleYear.isNotEmpty()) specsBuilder.append("📅 Year: $vehicleYear\n")
@@ -5930,98 +6614,67 @@ fun PostAdDialog(
                                             specsBuilder.append("⛽ Fuel: $vehicleFuel\n")
                                         }
                                         "2" -> {
-                                            specsBuilder.append("🌐 Category: Electronics (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (phoneBrand.isNotEmpty()) specsBuilder.append("📱 Brand: $phoneBrand\n")
                                             if (phoneStorage.isNotEmpty()) specsBuilder.append("💾 Storage: $phoneStorage\n")
                                             if (phoneRam.isNotEmpty()) specsBuilder.append("⚡ RAM: $phoneRam\n")
                                             if (phoneColor.isNotEmpty()) specsBuilder.append("🎨 Color: $phoneColor\n")
                                         }
                                         "3" -> {
-                                            specsBuilder.append("🌐 Category: Real Estate (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (propertyBedrooms.isNotEmpty()) specsBuilder.append("🛏️ Bedrooms: $propertyBedrooms\n")
                                             if (propertyBathrooms.isNotEmpty()) specsBuilder.append("🚿 Bathrooms: $propertyBathrooms\n")
                                             specsBuilder.append("🛋️ Furnishing: $propertyFurnishing\n")
                                         }
                                         "4" -> {
-                                            specsBuilder.append("🌐 Category: Fashion/Apparel (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             specsBuilder.append("🚻 Gender: $fashionGender\n")
                                             if (fashionSize.isNotEmpty()) specsBuilder.append("📏 Size: $fashionSize\n")
                                             if (fashionBrand.isNotEmpty()) specsBuilder.append("🏷️ Apparel Brand: $fashionBrand\n")
                                         }
                                         "5" -> {
-                                            specsBuilder.append("🌐 Category: Furnishing (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (furnitureMaterial.isNotEmpty()) specsBuilder.append("🪵 Material: $furnitureMaterial\n")
                                             if (furnitureBrand.isNotEmpty()) specsBuilder.append("🏷️ Brand: $furnitureBrand\n")
                                         }
                                         "6" -> {
-                                            specsBuilder.append("🌐 Category: Electronics (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (elecType.isNotEmpty()) specsBuilder.append("💻 Device Type: $elecType\n")
                                             if (elecBrand.isNotEmpty()) specsBuilder.append("🏷️ Brand: $elecBrand\n")
                                         }
                                         "7" -> {
-                                            specsBuilder.append("🌐 Category: Health & Beauty (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (beautyType.isNotEmpty()) specsBuilder.append("💅 Product Type: $beautyType\n")
                                             if (beautyBrand.isNotEmpty()) specsBuilder.append("🌸 Brand/Line: $beautyBrand\n")
                                         }
                                         "8" -> {
-                                            specsBuilder.append("🌐 Category: Services (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (serviceType.isNotEmpty()) specsBuilder.append("🛠️ Service Offered: $serviceType\n")
                                             if (serviceExperience.isNotEmpty()) specsBuilder.append("💼 Experience: $serviceExperience\n")
                                         }
                                         "9" -> {
-                                            specsBuilder.append("🌐 Category: Jobs (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (jobType.isNotEmpty()) specsBuilder.append("👔 Job Type: $jobType\n")
                                             if (jobExperience.isNotEmpty()) specsBuilder.append("🎓 Experience Required: $jobExperience\n")
                                         }
                                         "10" -> {
-                                            specsBuilder.append("🌐 Category: Animals & Pets (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (petType.isNotEmpty()) specsBuilder.append("🐶 Pet Type: $petType\n")
                                             if (petAge.isNotEmpty()) specsBuilder.append("📅 Age Level: $petAge\n")
                                         }
                                         "11" -> {
-                                            specsBuilder.append("🌐 Category: Agriculture & Food (")
-                                            specsBuilder.append(subcategory)
-                                            specsBuilder.append(")\n")
                                             if (agriType.isNotEmpty()) specsBuilder.append("🚜 Agriculture Type: $agriType\n")
                                             if (agriUnit.isNotEmpty()) specsBuilder.append("📦 Measure Unit: $agriUnit\n")
                                         }
                                     }
 
+                                    if (extraSpecificBrand.isNotEmpty()) specsBuilder.append("🏷️ Specific Brand: $extraSpecificBrand\n")
+                                    if (extraSpecificPartName.isNotEmpty()) specsBuilder.append("⚙️ Specific Part/Sub-item: $extraSpecificPartName\n")
+                                    if (extraSpecificModel.isNotEmpty()) specsBuilder.append("📋 Model/Version: $extraSpecificModel\n")
+
                                     val finalDescription = if (specsBuilder.isNotEmpty()) {
-                                        val descPart = if (description.trim().isNotEmpty()) "\n📝 AD DESCRIPTION:\n" + description else ""
+                                        val descPart = if (description.trim().isNotEmpty()) "\n\n📝 AD DESCRIPTION:\n" + description else ""
                                         "📌 SPECIFICATIONS:\n" + specsBuilder.toString() + descPart
                                     } else {
                                         description
                                     }
 
-                                    onPublish(
-                                        trimTitle,
-                                        trimPrice,
-                                        categoryId,
-                                        location,
-                                        condition,
-                                        finalDescription,
-                                        imageUrl,
-                                        selectedPremiumTier != "free"
-                                    )
+                                    if (selectedPremiumTier == "free") {
+                                        executePublishAd("")
+                                    } else {
+                                        showPaymentScreen = true
+                                    }
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -6030,7 +6683,11 @@ fun PostAdDialog(
                                 enabled = isFormValid,
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("Publish Ad Live Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(
+                                    text = if (selectedPremiumTier == "free") "Publish Ad Live Now" else "Proceed to Payment Gate 💳",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -6039,6 +6696,7 @@ fun PostAdDialog(
             }
         }
     }
+}
 }
 
 @Composable
@@ -6707,6 +7365,9 @@ fun compressImageUri(context: Context, uri: android.net.Uri): ByteArray? {
 }
 
 fun getProductImages(product: Product): List<String> {
+    if (product.imageUrl.contains("||")) {
+        return product.imageUrl.split("||").filter { it.isNotBlank() }
+    }
     val list = mutableListOf(product.imageUrl)
     val categoryId = product.categoryId
     val alt1 = when (categoryId) {
@@ -7053,6 +7714,18 @@ object ProductPersistence {
             return null
         }
     }
+
+    fun getPostedAdIds(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences("marketplace_products_prefs", Context.MODE_PRIVATE)
+        return prefs.getStringSet("posted_ad_ids", emptySet()) ?: emptySet()
+    }
+
+    fun addPostedAdId(context: Context, adId: String) {
+        val prefs = context.getSharedPreferences("marketplace_products_prefs", Context.MODE_PRIVATE)
+        val current = prefs.getStringSet("posted_ad_ids", emptySet()) ?: emptySet()
+        val updated = current.toMutableSet().apply { add(adId) }
+        prefs.edit().putStringSet("posted_ad_ids", updated).apply()
+    }
 }
 
 // --- Update Dialog ---
@@ -7064,172 +7737,208 @@ fun UpdateDialog(
     onDismiss: () -> Unit,
     onUpdateClick: () -> Unit
 ) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Column(
+            Surface(
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier
-                    .padding(24.dp)
                     .fillMaxWidth()
+                    .fillMaxHeight(0.75f)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
             ) {
-                // Header
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .navigationBarsPadding()
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = "New Update Available!",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Version: ${updateInfo.latestVersion}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (!isDownloading) {
-                    // Release Notes
-                    Text(
-                        text = "What's New:",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                            .width(40.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                            .align(Alignment.CenterHorizontally)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 150.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                RoundedCornerShape(12.dp)
-                            )
-                            .padding(12.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = updateInfo.releaseNotes,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    if (updateInfo.apkSize > 0) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Download size: ${String.format("%.2f", updateInfo.apkSize.toFloat() / (1024 * 1024))} MB",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Buttons
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text("Later")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = onUpdateClick,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ArrowDownward,
+                                imageVector = Icons.Default.Info,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Download & Install", fontWeight = FontWeight.Bold)
                         }
-                    }
-                } else {
-                    // Downloading State
-                    Text(
-                        text = "Downloading update package...",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    LinearProgressIndicator(
-                        progress = { downloadProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${(downloadProgress * 100).toInt()}% downloaded",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        if (updateInfo.apkSize > 0) {
-                            val downloadedMb = (downloadProgress * updateInfo.apkSize.toFloat()) / (1024 * 1024)
-                            val totalMb = updateInfo.apkSize.toFloat() / (1024 * 1024)
+                        Column {
                             Text(
-                                text = "${String.format("%.1f", downloadedMb)} / ${String.format("%.1f", totalMb)} MB",
+                                text = "New Update Available!",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Version: ${updateInfo.latestVersion}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Please do not close the app while the download is in progress.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        if (!isDownloading) {
+                            // Release Notes
+                            Text(
+                                text = "What's New:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .padding(12.dp)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    text = updateInfo.releaseNotes,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            if (updateInfo.apkSize > 0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Download size: ${String.format("%.2f", updateInfo.apkSize.toFloat() / (1024 * 1024))} MB",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            // Buttons
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Later")
+                                }
+                                Button(
+                                    onClick = onUpdateClick,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.weight(1.5f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDownward,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Update Now", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            // Downloading State
+                            Text(
+                                text = "Downloading update package...",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${(downloadProgress * 100).toInt()}% downloaded",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                if (updateInfo.apkSize > 0) {
+                                    val downloadedMb = (downloadProgress * updateInfo.apkSize.toFloat()) / (1024 * 1024)
+                                    val totalMb = updateInfo.apkSize.toFloat() / (1024 * 1024)
+                                    Text(
+                                        text = "${String.format("%.1f", downloadedMb)} / ${String.format("%.1f", totalMb)} MB",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Please do not close the app while the download is in progress.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -7237,3 +7946,742 @@ fun UpdateDialog(
 }
 
 
+
+object AdDraftStore {
+    val data = mutableMapOf<String, Any>()
+    
+    fun getString(key: String, default: String): String = data[key] as? String ?: default
+    fun getInt(key: String, default: Int): Int = data[key] as? Int ?: default
+    fun getBoolean(key: String, default: Boolean): Boolean = data[key] as? Boolean ?: default
+    
+    fun clear() {
+        data.clear()
+    }
+
+    fun saveDraft(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("marketplace_draft_prefs", Context.MODE_PRIVATE)
+            val editor = prefs.edit().clear()
+            data.forEach { (key, value) ->
+                when (value) {
+                    is String -> editor.putString(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Boolean -> editor.putBoolean(key, value)
+                }
+            }
+            editor.apply()
+        } catch (e: Exception) {
+            android.util.Log.e("AdDraftStore", "Failed to save draft: ${e.message}")
+        }
+    }
+
+    fun loadDraft(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("marketplace_draft_prefs", Context.MODE_PRIVATE)
+            prefs.all.forEach { (key, value) ->
+                if (value != null) {
+                    data[key] = value
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AdDraftStore", "Failed to load draft: ${e.message}")
+        }
+    }
+}
+
+// --- Advanced Full-Screen Search Screen ---
+@Composable
+fun AdvancedSearchScreen(
+    products: List<Product>,
+    onProductClick: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var submittedQuery by rememberSaveable { mutableStateOf("") }
+    var isSubmitted by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // Filtering states
+    var showFiltersPage by rememberSaveable { mutableStateOf(false) }
+    var minPrice by rememberSaveable { mutableStateOf("") }
+    var maxPrice by rememberSaveable { mutableStateOf("") }
+    var selectedSort by rememberSaveable { mutableStateOf("Newest / Latest First") }
+    var filterCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var filterSubcategory by rememberSaveable { mutableStateOf("") }
+    var filterBrand by rememberSaveable { mutableStateOf("") }
+    var filterModel by rememberSaveable { mutableStateOf("") }
+    var filterType by rememberSaveable { mutableStateOf("") }
+    var filterCondition by rememberSaveable { mutableStateOf("") }
+    var filterSpecifics by rememberSaveable { mutableStateOf("") }
+
+    val pastSearches = remember { mutableStateListOf("Toyota Vitz", "iPhone 15 Pro", "Apartment Bole", "Agri Tractor", "Nike Shoes", "Washing Machine", "Sofa Set") }
+
+    // Filter and Sort helper
+    val filteredProducts = remember(products, submittedQuery, isSubmitted, minPrice, maxPrice, selectedSort, filterCategory, filterSubcategory, filterBrand, filterModel, filterType, filterCondition, filterSpecifics) {
+        if (!isSubmitted && submittedQuery.isEmpty()) {
+            emptyList()
+        } else {
+            var list = products.filter { prod ->
+                val matchesQuery = if (submittedQuery.isEmpty()) true else {
+                    prod.title.contains(submittedQuery, ignoreCase = true) ||
+                    prod.description.contains(submittedQuery, ignoreCase = true)
+                }
+                val matchesCategory = if (filterCategory == null) true else prod.categoryId == filterCategory
+                
+                val matchesSubcategory = if (filterSubcategory.isEmpty()) true else {
+                    prod.description.contains(filterSubcategory, ignoreCase = true)
+                }
+                
+                val matchesBrand = if (filterBrand.isEmpty()) true else {
+                    prod.title.contains(filterBrand, ignoreCase = true) ||
+                    prod.description.contains(filterBrand, ignoreCase = true)
+                }
+                
+                val matchesModel = if (filterModel.isEmpty()) true else {
+                    prod.title.contains(filterModel, ignoreCase = true) ||
+                    prod.description.contains(filterModel, ignoreCase = true)
+                }
+                
+                val matchesType = if (filterType.isEmpty()) true else {
+                    prod.description.contains(filterType, ignoreCase = true)
+                }
+                
+                val matchesCondition = if (filterCondition.isEmpty()) true else {
+                    prod.condition.equals(filterCondition, ignoreCase = true)
+                }
+                
+                val matchesSpecifics = if (filterSpecifics.isEmpty()) true else {
+                    prod.description.contains(filterSpecifics, ignoreCase = true)
+                }
+
+                // Price range matching
+                val priceVal = prod.price.replace("[^\\d]".toRegex(), "").toDoubleOrNull() ?: 0.0
+                val minVal = minPrice.toDoubleOrNull() ?: 0.0
+                val maxVal = maxPrice.toDoubleOrNull() ?: Double.MAX_VALUE
+                val matchesPrice = priceVal >= minVal && priceVal <= maxVal
+
+                matchesQuery && matchesCategory && matchesSubcategory && matchesBrand && matchesModel && matchesType && matchesCondition && matchesSpecifics && matchesPrice
+            }
+
+            // Apply Sorting
+            list = when (selectedSort) {
+                "Cheapest First" -> list.sortedBy { it.price.replace("[^\\d]".toRegex(), "").toDoubleOrNull() ?: 0.0 }
+                "Highest Price" -> list.sortedByDescending { it.price.replace("[^\\d]".toRegex(), "").toDoubleOrNull() ?: 0.0 }
+                "Newest / Latest First" -> list.sortedByDescending { it.id.toIntOrNull() ?: 0 } // latest ID first
+                else -> list
+            }
+
+            list
+        }
+    }
+
+    androidx.activity.compose.BackHandler {
+        if (showFiltersPage) {
+            showFiltersPage = false
+        } else if (isSubmitted) {
+            isSubmitted = false
+        } else {
+            onClose()
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            if (showFiltersPage) {
+                // --- PAGE 3: FULL SCREEN FILTERING PLAN ---
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Filter & Sort Plan",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        IconButton(onClick = { showFiltersPage = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close Filters")
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Sort Plan Section
+                    Text("Select Sorting Method", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    val sortOptions = listOf("Newest / Latest First", "Cheapest First", "Highest Price")
+                    sortOptions.forEach { opt ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedSort = opt }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedSort == opt,
+                                onClick = { selectedSort = opt }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(opt, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Price Range Plan Section
+                    Text("Price Range (Birr)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = minPrice,
+                            onValueChange = { minPrice = it },
+                            label = { Text("Min Price (Br)") },
+                            modifier = Modifier.weight(1f).testTag("filter_min_price"),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                        )
+                        OutlinedTextField(
+                            value = maxPrice,
+                            onValueChange = { maxPrice = it },
+                            label = { Text("Max Price (Br)") },
+                            modifier = Modifier.weight(1f).testTag("filter_max_price"),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Category Filter Section
+                    Text("Select Category", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Category Choice: All Categories
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { filterCategory = null }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = filterCategory == null,
+                                onClick = { filterCategory = null }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("All Categories", style = MaterialTheme.typography.bodyLarge)
+                        }
+
+                        mockCategories.forEach { cat ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { filterCategory = cat.id }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = filterCategory == cat.id,
+                                    onClick = { filterCategory = cat.id }
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(cat.name, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Product Specifics & Attributes Plan Section
+                    Text("Product Specifics & Attributes", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    OutlinedTextField(
+                        value = filterSubcategory,
+                        onValueChange = { filterSubcategory = it },
+                        label = { Text("Subcategory / Segment (e.g. Laptops, Cars)") },
+                        modifier = Modifier.fillMaxWidth().testTag("filter_subcategory"),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = filterBrand,
+                        onValueChange = { filterBrand = it },
+                        label = { Text("Brand / Manufacturer") },
+                        modifier = Modifier.fillMaxWidth().testTag("filter_brand"),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = filterModel,
+                        onValueChange = { filterModel = it },
+                        label = { Text("Model / Version Name") },
+                        modifier = Modifier.fillMaxWidth().testTag("filter_model"),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = filterType,
+                        onValueChange = { filterType = it },
+                        label = { Text("Type / Part (e.g. Engine, Battery)") },
+                        modifier = Modifier.fillMaxWidth().testTag("filter_type"),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = filterCondition,
+                        onValueChange = { filterCondition = it },
+                        label = { Text("Condition (New, Used, Refurbished)") },
+                        modifier = Modifier.fillMaxWidth().testTag("filter_condition"),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                minPrice = ""
+                                maxPrice = ""
+                                selectedSort = "Newest / Latest First"
+                                filterCategory = null
+                                filterSubcategory = ""
+                                filterBrand = ""
+                                filterModel = ""
+                                filterType = ""
+                                filterCondition = ""
+                                filterSpecifics = ""
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp)
+                        ) {
+                            Text("Clear All")
+                        }
+
+                        Button(
+                            onClick = { showFiltersPage = false },
+                            modifier = Modifier.weight(1f).height(48.dp)
+                        ) {
+                            Text("Apply Filters")
+                        }
+                    }
+                }
+            } else if (!isSubmitted) {
+                // --- PAGE 1: DEDICATED SEARCH QUERY AND HISTORY PAGE ---
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close Search")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f).height(52.dp).testTag("advanced_search_input"),
+                            placeholder = { Text("Search specific items or parts...", fontSize = 14.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Search
+                            ),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                onSearch = {
+                                    if (searchQuery.trim().isNotEmpty()) {
+                                        val trimmed = searchQuery.trim()
+                                        if (!pastSearches.contains(trimmed)) {
+                                            pastSearches.add(0, trimmed)
+                                        }
+                                        submittedQuery = trimmed
+                                        isSubmitted = true
+                                    }
+                                }
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "Recent & Popular Searches",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(pastSearches.take(12)) { term ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        searchQuery = term
+                                        submittedQuery = term
+                                        isSubmitted = true
+                                    }
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.History, 
+                                    contentDescription = null, 
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = term,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // --- PAGE 2: FULL PAGE SEARCH RESULTS PAGE ---
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Header Bar
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { isSubmitted = false }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to typing")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Results for \"$submittedQuery\"",
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${filteredProducts.size} items found",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(onClick = { Toast.makeText(context, "Search alert saved! We'll notify you when new listings match.", Toast.LENGTH_LONG).show() }) {
+                                Icon(Icons.Default.NotificationsActive, contentDescription = "Save Search Alert", tint = MaterialTheme.colorScheme.primary)
+                            }
+                            Button(
+                                onClick = { showFiltersPage = true },
+                                contentPadding = PaddingValues(horizontal = 14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                            ) {
+                                Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Filter & Sort", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                            }
+                        }
+                    }
+
+                    if (filteredProducts.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.SearchOff, 
+                                    contentDescription = null, 
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), 
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("No matching products found", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "We couldn't find anything matching your exact query and filter specs. Try clearing filters or searching for alternative parts or brands.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Button(
+                                    onClick = {
+                                        minPrice = ""
+                                        maxPrice = ""
+                                        filterCategory = null
+                                        filterSubcategory = ""
+                                        filterBrand = ""
+                                        filterModel = ""
+                                        filterType = ""
+                                        filterCondition = ""
+                                    }
+                                ) {
+                                    Text("Reset Filters")
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(filteredProducts) { item ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onProductClick(item.id) },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        AsyncImage(
+                                            model = item.imageUrl,
+                                            contentDescription = item.title,
+                                            modifier = Modifier.size(96.dp).clip(RoundedCornerShape(8.dp)),
+                                            contentScale = ContentScale.Crop,
+                                            error = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(item.categoryId, item.title)),
+                                            placeholder = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(item.categoryId, item.title))
+                                        )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (item.isPromoted) {
+                                                    Surface(
+                                                        color = Color(0xFFFFD700),
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        modifier = Modifier.padding(end = 6.dp)
+                                                    ) {
+                                                        Text("VIP BOOST", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                                    }
+                                                }
+                                                Text(
+                                                    text = item.title,
+                                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = item.price,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black)
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text(item.location, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text(item.condition, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                                }
+                                            }
+                                            
+                                            // Matched specs summary
+                                            val specs = item.description.substringBefore("\n\n📝 AD DESCRIPTION:").substringAfter("📌 SPECIFICATIONS:\n").trim()
+                                            if (specs.isNotEmpty() && (specs.contains("🏷️") || specs.contains("⚙️") || specs.contains("📋") || specs.contains("💼") || specs.contains("💻"))) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                val summary = specs.lines().filter { it.isNotEmpty() }.joinToString(" | ") { it.replace("🏷️ Specific Brand: ", "").replace("⚙️ Specific Part/Sub-item: ", "").replace("📋 Model/Version: ", "").replace("💻 Device Type: ", "").replace("🏷️ Brand: ", "") }.take(50)
+                                                Text(
+                                                    text = "Attributes: $summary...",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Seller Profile Screen ---
+@Composable
+fun SellerProfileScreen(
+    sellerName: String,
+    products: List<Product>,
+    sellerReviews: List<Review>,
+    onBackClick: () -> Unit,
+    onProductClick: (String) -> Unit
+) {
+    val sellerProducts = products.filter { it.sellerName == sellerName }
+    val reviewsForSeller = sellerReviews.filter { it.sellerName == sellerName }
+    val avgRating = if (reviewsForSeller.isEmpty()) 5.0f else reviewsForSeller.map { it.rating }.average().toFloat()
+    val totalRatings = reviewsForSeller.size
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Header bar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 2.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackClick) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Seller Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Profile Info
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = sellerName.firstOrNull()?.toString() ?: "?",
+                    color = Color.White,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = sellerName,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Verified Seller", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                repeat(5) { starIndex ->
+                    val isFilled = starIndex < Math.round(avgRating)
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = if (isFilled) Color(0xFFFBBF24) else Color.LightGray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = String.format("%.1f (%d reviews)", avgRating, totalRatings),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        // Active Listings Title
+        Text(
+            text = "Active Listings (${sellerProducts.size})",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.padding(16.dp)
+        )
+
+        // Active Listings Grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(sellerProducts) { product ->
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth().clickable { onProductClick(product.id) }
+                ) {
+                    Column {
+                        AsyncImage(
+                            model = getProductImages(product).firstOrNull() ?: product.imageUrl,
+                            contentDescription = product.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            error = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(product.categoryId, product.title)),
+                            placeholder = rememberAsyncImagePainter(model = NetworkManager.getFallbackImageUrl(product.categoryId, product.title))
+                        )
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = product.title,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = product.price,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -14,22 +14,23 @@ android {
     applicationId = "com.aistudio.vibro.xyzq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.0.3"
+    versionCode = 1
+    versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
   signingConfigs {
     create("release") {
-      val kFile = file("${rootDir}/app/release.jks")
+      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      val kFile = file(keystorePath)
       if (kFile.exists()) {
         storeFile = kFile
-        storePassword = "vibropass"
-        keyAlias = "vibrokey"
-        keyPassword = "vibropass"
+        storePassword = System.getenv("STORE_PASSWORD") ?: "android"
+        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+        keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
       } else {
-        // Fallback to debug if release key is missing
+        // Graceful fallback to debug keystore if release is not available
         storeFile = file("${rootDir}/debug.keystore")
         storePassword = "android"
         keyAlias = "androiddebugkey"
