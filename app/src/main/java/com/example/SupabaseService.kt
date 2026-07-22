@@ -1,6 +1,7 @@
 package com.example
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.example.model.Product
 
 import android.util.Base64
 import android.util.Log

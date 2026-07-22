@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.vibro.xyzq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "1.0.5"
+    versionCode = 6
+    versionName = "1.0.6"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -28,10 +28,10 @@ android {
       keyPassword = "vibropass"
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      storeFile = file("release.jks")
+      storePassword = "vibropass"
+      keyAlias = "vibrokey"
+      keyPassword = "vibropass"
     }
   }
 
