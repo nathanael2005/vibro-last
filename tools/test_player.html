@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Videasy WebView Simulator</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #0b0f19;
+            color: #e2e8f0;
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+        h1 { font-size: 1.4rem; margin-bottom: 4px; }
+        .subtitle { color: #94a3b8; margin-bottom: 24px; font-size: 0.95rem; }
+        .alert {
+            background: #422006;
+            border: 1px solid #EAB308;
+            color: #fef3c7;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            max-width: 960px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #111827;
+            border-radius: 8px;
+            border: 1px solid #1e293b;
+        }
+        label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: #94a3b8; }
+        input {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+        input[type="number"] { width: 80px; }
+        button {
+            background: #EAB308;
+            color: #0f172a;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button:hover { background: #FFC107; }
+        .wrapper { width: 100%; max-width: 960px; margin: 0 auto; }
+        iframe {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            border: 2px solid #EAB308;
+            background: #000;
+            border-radius: 4px;
+        }
+        .status {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: #1e293b;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+        .status code { color: #EAB308; }
+        .presets { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .presets button { background: #334155; color: white; font-weight: 600; font-size: 0.85rem; padding: 8px 14px; }
+        .presets button:hover { background: #475569; }
+        .checklist { margin-top: 24px; max-width: 960px; margin-left: auto; margin-right: auto; }
+        .checklist h3 { font-size: 1rem; margin-bottom: 8px; }
+        .checklist ul { color: #94a3b8; line-height: 1.7; padding-left: 20px; }
+        .links { margin-top: 12px; font-size: 0.85rem; }
+        .links a { color: #EAB308; }
+    </style>
+</head>
+<body>
+    <div class="alert">
+        <strong>Updated (Jun 2026):</strong> <code>videasy.xyz</code> no longer resolves (DNS dead).
+        The active endpoint is <code>player.videasy.net</code> with paths
+        <code>/movie/{tmdbId}</code> and <code>/tv/{tmdbId}/{season}/{episode}</code> — no <code>/embed/</code> prefix.
+    </div>
+
+    <div class="wrapper">
+        <h1>Videasy WebView Simulator</h1>
+        <p class="subtitle">Replicates how Nate loads embeds inside Android WebView (iframe sandbox test)</p>
+
+        <div class="controls">
+            <label>
+                Type
+                <select id="type">
+                    <option value="movie">Movie</option>
+                    <option value="tv">TV Show</option>
+                </select>
+            </label>
+            <label>
+                TMDB ID
+                <input type="number" id="tmdbId" value="603" min="1">
+            </label>
+            <label id="seasonLabel" style="display:none">
+                Season
+                <input type="number" id="season" value="1" min="1">
+            </label>
+            <label id="episodeLabel" style="display:none">
+                Episode
+                <input type="number" id="episode" value="1" min="1">
+            </label>
+            <button type="button" onclick="loadEmbed()">Load Embed</button>
+            <button type="button" onclick="openDirect()">Open Direct (Method 1)</button>
+        </div>
+
+        <div class="presets">
+            <button type="button" onclick="preset('movie', 603)">The Matrix (603)</button>
+            <button type="button" onclick="preset('tv', 119051, 1, 1)">Wednesday S1E1 (119051)</button>
+            <button type="button" onclick="preset('tv', 1399, 1, 1)">Game of Thrones S1E1 (1399)</button>
+            <button type="button" onclick="preset('movie', 550)">Fight Club (550)</button>
+        </div>
+
+        <iframe id="player" src="https://player.videasy.net/movie/603" allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>
+
+        <div class="status">
+            Current URL: <code id="currentUrl">https://player.videasy.net/movie/603</code>
+        </div>
+        <div class="links">
+            Docs: <a href="https://www.videasy.net/docs" target="_blank" rel="noopener">videasy.net/docs</a>
+        </div>
+    </div>
+
+    <div class="checklist">
+        <h3>What to verify (matches app WebView behavior)</h3>
+        <ul>
+            <li>Player UI loads inside the iframe (no blank frame or X-Frame-Options error)</li>
+            <li>Clicking play starts video without redirecting the whole page away</li>
+            <li>No popup ads hijack the browser tab</li>
+            <li><strong>Method 1:</strong> paste the URL directly in Chrome/Firefox address bar</li>
+            <li><strong>Method 2:</strong> use this iframe page — closest simulation of Android WebView</li>
+        </ul>
+    </div>
+
+    <script>
+        const BASE = 'https://player.videasy.net';
+        const typeEl = document.getElementById('type');
+        const seasonLabel = document.getElementById('seasonLabel');
+        const episodeLabel = document.getElementById('episodeLabel');
+
+        typeEl.addEventListener('change', () => {
+            const isTv = typeEl.value === 'tv';
+            seasonLabel.style.display = isTv ? 'flex' : 'none';
+            episodeLabel.style.display = isTv ? 'flex' : 'none';
+        });
+
+        function buildUrl() {
+            const type = typeEl.value;
+            const id = document.getElementById('tmdbId').value;
+            if (type === 'movie') {
+                return `${BASE}/movie/${id}`;
+            }
+            const season = document.getElementById('season').value;
+            const episode = document.getElementById('episode').value;
+            return `${BASE}/tv/${id}/${season}/${episode}`;
+        }
+
+        function loadEmbed() {
+            const url = buildUrl();
+            document.getElementById('player').src = url;
+            document.getElementById('currentUrl').textContent = url;
+        }
+
+        function openDirect() {
+            window.open(buildUrl(), '_blank');
+        }
+
+        function preset(type, id, season, episode) {
+            document.getElementById('type').value = type;
+            document.getElementById('tmdbId').value = id;
+            typeEl.dispatchEvent(new Event('change'));
+            if (type === 'tv') {
+                document.getElementById('season').value = season || 1;
+                document.getElementById('episode').value = episode || 1;
+            }
+            loadEmbed();
+        }
+    </script>
+</body>
+</html>

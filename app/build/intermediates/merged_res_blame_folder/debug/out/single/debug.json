@@ -1,0 +1,98 @@
+[
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_custom_scrub_track.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\custom_scrub_track.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_pause_circle_filled.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_pause_circle_filled.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_layers.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_layers.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\mipmap-xxhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_custom_scrub_thumb.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\custom_scrub_thumb.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\mipmap-hdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\mipmap-hdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\xml_network_security_config.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\xml\\network_security_config.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\xml_backup_rules.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\xml\\backup_rules.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_player_bottom_gradient.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\player_bottom_gradient.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_placeholder_poster.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\placeholder_poster.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\layout_custom_player_controls.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\layout\\custom_player_controls.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_skip_next.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_skip_next.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_settings_gear.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_settings_gear.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_back_arrow.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_back_arrow.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_play_circle_filled.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_play_circle_filled.xml"
+    },
+    {
+        "merged": "com.nate.app-merged_res-57:/xml_network_security_config.xml.flat",
+        "source": "com.nate.app-main-59:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\mipmap-mdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\mipmap-mdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\xml_data_extraction_rules.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\xml\\data_extraction_rules.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_tv_banner.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\tv_banner.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\mipmap-xhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\mipmap_ic_launcher.png.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\mipmap\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\mipmap-xxxhdpi\\ic_launcher.png"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_ic_subtitles.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\ic_subtitles.xml"
+    },
+    {
+        "merged": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-merged_res-57:\\drawable_player_top_gradient.xml.flat",
+        "source": "C:\\Users\\Asus\\.gradle\\daemon\\8.12\\com.nate.app-main-59:\\drawable\\player_top_gradient.xml"
+    }
+]

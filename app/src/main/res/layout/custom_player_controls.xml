@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/player_controls_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#40000000">
+
+    <LinearLayout
+        android:id="@+id/topPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/player_top_gradient"
+        android:orientation="horizontal"
+        android:padding="24dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:src="@drawable/ic_back_arrow"
+            android:tint="#FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/player_series_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="You're watching"
+                android:textColor="#B3FFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/player_episode_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif-black"
+                android:text="Now Playing"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/btn_next_episode"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Next Episode"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_skip_next"
+                android:tint="#FFFFFF"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/btn_audio_tracks"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Audio Tracks"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_layers"
+                android:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btn_subtitles"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Subtitles"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_subtitles"
+                android:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btn_settings"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Settings"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_settings_gear"
+                android:tint="#FFFFFF" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bottomPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/player_bottom_gradient"
+        android:padding="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <ImageButton
+            android:id="@+id/btn_main_play_pause"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Play or Pause"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_pause_circle_filled"
+            android:tint="#FFC107"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/txt_current_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="00:00"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            app:layout_constraintBottom_toBottomOf="@id/btn_main_play_pause"
+            app:layout_constraintStart_toEndOf="@id/btn_main_play_pause"
+            app:layout_constraintTop_toTopOf="@id/btn_main_play_pause" />
+
+        <SeekBar
+            android:id="@+id/player_seekbar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="12dp"
+            android:progressDrawable="@drawable/custom_scrub_track"
+            android:splitTrack="false"
+            android:thumb="@drawable/custom_scrub_thumb"
+            app:layout_constraintBottom_toBottomOf="@id/btn_main_play_pause"
+            app:layout_constraintEnd_toStartOf="@id/txt_total_time"
+            app:layout_constraintStart_toEndOf="@id/txt_current_time"
+            app:layout_constraintTop_toTopOf="@id/btn_main_play_pause" />
+
+        <TextView
+            android:id="@+id/txt_total_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textColor="#B3FFFFFF"
+            android:textSize="14sp"
+            app:layout_constraintBottom_toBottomOf="@id/btn_main_play_pause"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/btn_main_play_pause" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

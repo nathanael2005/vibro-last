@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nate</string>
+    <string name="app_tagline">Your streaming hub for movies and TV</string>
+    <string name="streaming_disclaimer">Playback uses third-party embed sources. Availability may change without notice. You are responsible for complying with applicable laws in your region.</string>
+    <string name="tmdb_attribution">Metadata provided by The Movie Database (TMDB). Nate is not endorsed or certified by TMDB.</string>
+</resources>

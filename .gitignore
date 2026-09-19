@@ -1,0 +1,30 @@
+# Android build outputs (except the release APK)
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Module build outputs
+tv/build/
+mobile/build/
+core/build/
+
+# Gradle cache
+.gradle/
+
+# Keystore files
+*.jks
+*.keystore
+
+# NDK
+obj/
+
+# IntelliJ / Android Studio
+*.idea/
+*.iml

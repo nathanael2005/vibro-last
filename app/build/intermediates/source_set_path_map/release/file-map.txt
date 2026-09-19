@@ -1,0 +1,61 @@
+com.nate.app-jetified-startup-runtime-1.1.1-0 C:\Users\Asus\.gradle\caches\8.12\transforms\007d008ccb0dc37018e008dc5eb9ef7a\transformed\jetified-startup-runtime-1.1.1\res
+com.nate.app-media-1.7.0-1 C:\Users\Asus\.gradle\caches\8.12\transforms\03f912e6165a1899034d6dbe25b7190e\transformed\media-1.7.0\res
+com.nate.app-jetified-activity-1.8.2-2 C:\Users\Asus\.gradle\caches\8.12\transforms\06bc4194c30679b83f301586bcd4a4de\transformed\jetified-activity-1.8.2\res
+com.nate.app-lifecycle-viewmodel-2.7.0-3 C:\Users\Asus\.gradle\caches\8.12\transforms\18cfd43c9a843935a6adda402716495c\transformed\lifecycle-viewmodel-2.7.0\res
+com.nate.app-jetified-coil-base-2.6.0-4 C:\Users\Asus\.gradle\caches\8.12\transforms\1bb7508825b75ac93dadd3100417a963\transformed\jetified-coil-base-2.6.0\res
+com.nate.app-jetified-tv-material-1.0.0-rc01-5 C:\Users\Asus\.gradle\caches\8.12\transforms\1d2b97c18d81d16ef09e5cc5f99bf0ff\transformed\jetified-tv-material-1.0.0-rc01\res
+com.nate.app-jetified-activity-ktx-1.8.2-6 C:\Users\Asus\.gradle\caches\8.12\transforms\2499f028ea931c709891430092d8296a\transformed\jetified-activity-ktx-1.8.2\res
+com.nate.app-recyclerview-1.3.0-7 C:\Users\Asus\.gradle\caches\8.12\transforms\24d276427f3771d04912217dd726f029\transformed\recyclerview-1.3.0\res
+com.nate.app-jetified-lifecycle-viewmodel-ktx-2.7.0-8 C:\Users\Asus\.gradle\caches\8.12\transforms\2996996df8b530455cd2b7d751c715e5\transformed\jetified-lifecycle-viewmodel-ktx-2.7.0\res
+com.nate.app-jetified-runtime-release-9 C:\Users\Asus\.gradle\caches\8.12\transforms\2fcf3c42da296ddbcaf566a352846fbe\transformed\jetified-runtime-release\res
+com.nate.app-jetified-material-ripple-release-10 C:\Users\Asus\.gradle\caches\8.12\transforms\30253394a849ba4a0e56112de4a55313\transformed\jetified-material-ripple-release\res
+com.nate.app-jetified-emoji2-1.3.0-11 C:\Users\Asus\.gradle\caches\8.12\transforms\319f5d2ef665c35ef060aabd4f5fcb5c\transformed\jetified-emoji2-1.3.0\res
+com.nate.app-lifecycle-livedata-core-2.7.0-12 C:\Users\Asus\.gradle\caches\8.12\transforms\36bb74256eb4c67929f148de117d4b1e\transformed\lifecycle-livedata-core-2.7.0\res
+com.nate.app-jetified-animation-core-release-13 C:\Users\Asus\.gradle\caches\8.12\transforms\399b2cd55643a5287de6c55bbbb9be3b\transformed\jetified-animation-core-release\res
+com.nate.app-jetified-customview-poolingcontainer-1.0.0-14 C:\Users\Asus\.gradle\caches\8.12\transforms\3b72d91d4158bac09ca5143fba18cf66\transformed\jetified-customview-poolingcontainer-1.0.0\res
+com.nate.app-jetified-annotation-experimental-1.4.0-15 C:\Users\Asus\.gradle\caches\8.12\transforms\4822909311c792713a57bde9c20f2647\transformed\jetified-annotation-experimental-1.4.0\res
+com.nate.app-jetified-datastore-preferences-1.0.0-16 C:\Users\Asus\.gradle\caches\8.12\transforms\4a9dfd68b3fb8aa69ad48e3a276f2a9e\transformed\jetified-datastore-preferences-1.0.0\res
+com.nate.app-constraintlayout-2.1.4-17 C:\Users\Asus\.gradle\caches\8.12\transforms\4f5d5516cca22e7c4fd78c77e3285066\transformed\constraintlayout-2.1.4\res
+com.nate.app-jetified-tv-foundation-1.0.0-alpha11-18 C:\Users\Asus\.gradle\caches\8.12\transforms\5173552c5ed6fdd24a55c8ac95a07d06\transformed\jetified-tv-foundation-1.0.0-alpha11\res
+com.nate.app-jetified-profileinstaller-1.3.1-19 C:\Users\Asus\.gradle\caches\8.12\transforms\555c275e0dfbe6f58a9a961ff729fa2b\transformed\jetified-profileinstaller-1.3.1\res
+com.nate.app-jetified-material-icons-core-release-20 C:\Users\Asus\.gradle\caches\8.12\transforms\59da43896bbe41f2752eaa1c18959df9\transformed\jetified-material-icons-core-release\res
+com.nate.app-lifecycle-livedata-2.7.0-21 C:\Users\Asus\.gradle\caches\8.12\transforms\59de8a72e9fb2872a28ba9e5687c2f9d\transformed\lifecycle-livedata-2.7.0\res
+com.nate.app-jetified-lifecycle-livedata-core-ktx-2.7.0-22 C:\Users\Asus\.gradle\caches\8.12\transforms\6b8bc2a7080ea1e37978e9675a4f3cd9\transformed\jetified-lifecycle-livedata-core-ktx-2.7.0\res
+com.nate.app-jetified-lifecycle-process-2.7.0-23 C:\Users\Asus\.gradle\caches\8.12\transforms\6c1c9307ce72f0f6016d40081f12f248\transformed\jetified-lifecycle-process-2.7.0\res
+com.nate.app-jetified-datastore-1.0.0-24 C:\Users\Asus\.gradle\caches\8.12\transforms\6e9f2ece71106b93b5f4c8e54fb6eca0\transformed\jetified-datastore-1.0.0\res
+com.nate.app-jetified-runtime-saveable-release-25 C:\Users\Asus\.gradle\caches\8.12\transforms\8b372d27df1b305f8e82c09abe994bc5\transformed\jetified-runtime-saveable-release\res
+com.nate.app-lifecycle-runtime-2.7.0-26 C:\Users\Asus\.gradle\caches\8.12\transforms\8dc7ab0e5e3d165b04df2d50d1b4bfac\transformed\lifecycle-runtime-2.7.0\res
+com.nate.app-jetified-foundation-release-27 C:\Users\Asus\.gradle\caches\8.12\transforms\936c68275724302b270bd05ce9b19732\transformed\jetified-foundation-release\res
+com.nate.app-fragment-1.3.6-28 C:\Users\Asus\.gradle\caches\8.12\transforms\9607167e7b0455850187927fcb0ee77d\transformed\fragment-1.3.6\res
+com.nate.app-jetified-media3-ui-1.4.1-29 C:\Users\Asus\.gradle\caches\8.12\transforms\a22ca6dad622584d3ca683537ab5fab5\transformed\jetified-media3-ui-1.4.1\res
+com.nate.app-jetified-ui-unit-release-30 C:\Users\Asus\.gradle\caches\8.12\transforms\a275e7c6cf45f1aa96a4de98b949f91a\transformed\jetified-ui-unit-release\res
+com.nate.app-appcompat-1.6.1-31 C:\Users\Asus\.gradle\caches\8.12\transforms\a4191934ffce136d2c517a8899292b5e\transformed\appcompat-1.6.1\res
+com.nate.app-jetified-activity-compose-1.8.2-32 C:\Users\Asus\.gradle\caches\8.12\transforms\a5fd61559c6e58fd60626d0bde0077f5\transformed\jetified-activity-compose-1.8.2\res
+com.nate.app-jetified-emoji2-views-helper-1.3.0-33 C:\Users\Asus\.gradle\caches\8.12\transforms\ad62c7cee7644476410faa40c91f8345\transformed\jetified-emoji2-views-helper-1.3.0\res
+com.nate.app-jetified-material3-release-34 C:\Users\Asus\.gradle\caches\8.12\transforms\b3acd448fa521a736887a892aeceeb1b\transformed\jetified-material3-release\res
+com.nate.app-jetified-savedstate-ktx-1.2.1-35 C:\Users\Asus\.gradle\caches\8.12\transforms\b5ec1acafec9638c1f9cfbc8699d667c\transformed\jetified-savedstate-ktx-1.2.1\res
+com.nate.app-jetified-ui-geometry-release-36 C:\Users\Asus\.gradle\caches\8.12\transforms\bc2af3ac52e65d281e18ab7e0b1b5451\transformed\jetified-ui-geometry-release\res
+com.nate.app-jetified-core-ktx-1.12.0-37 C:\Users\Asus\.gradle\caches\8.12\transforms\bc9dfa8a06141e29da61dfe07ae7e01d\transformed\jetified-core-ktx-1.12.0\res
+com.nate.app-jetified-lifecycle-viewmodel-savedstate-2.7.0-38 C:\Users\Asus\.gradle\caches\8.12\transforms\c1e71b112f6faebe8f26ac3934c27732\transformed\jetified-lifecycle-viewmodel-savedstate-2.7.0\res
+com.nate.app-jetified-ui-tooling-preview-release-39 C:\Users\Asus\.gradle\caches\8.12\transforms\c3a03db808f76abb5f1cf41b3e2db5ff\transformed\jetified-ui-tooling-preview-release\res
+com.nate.app-jetified-ui-text-release-40 C:\Users\Asus\.gradle\caches\8.12\transforms\c4d2b3b1e8f420c2362b6633fb5b8057\transformed\jetified-ui-text-release\res
+com.nate.app-jetified-ui-release-41 C:\Users\Asus\.gradle\caches\8.12\transforms\c6d4d9d63d68ba4c949bef51eaa380d8\transformed\jetified-ui-release\res
+com.nate.app-jetified-lifecycle-viewmodel-compose-2.7.0-42 C:\Users\Asus\.gradle\caches\8.12\transforms\d159aa9120b489c97a47ec188ffaaefb\transformed\jetified-lifecycle-viewmodel-compose-2.7.0\res
+com.nate.app-jetified-animation-release-43 C:\Users\Asus\.gradle\caches\8.12\transforms\dd730cd021cc0d02c9b207146e169791\transformed\jetified-animation-release\res
+com.nate.app-jetified-ui-graphics-release-44 C:\Users\Asus\.gradle\caches\8.12\transforms\e06992e426b8016bbd7075f2dfe45539\transformed\jetified-ui-graphics-release\res
+com.nate.app-jetified-appcompat-resources-1.6.1-45 C:\Users\Asus\.gradle\caches\8.12\transforms\e2f81106c4b060ca26965d4ab4f3f5cf\transformed\jetified-appcompat-resources-1.6.1\res
+com.nate.app-jetified-ui-util-release-46 C:\Users\Asus\.gradle\caches\8.12\transforms\e3d78371043c68966ba0a268ed45f769\transformed\jetified-ui-util-release\res
+com.nate.app-core-1.12.0-47 C:\Users\Asus\.gradle\caches\8.12\transforms\eb41759101879028f49add9e86811a8d\transformed\core-1.12.0\res
+com.nate.app-jetified-lifecycle-runtime-ktx-2.7.0-48 C:\Users\Asus\.gradle\caches\8.12\transforms\f2f793a5ccaa67ff9481c42a0ca5abf5\transformed\jetified-lifecycle-runtime-ktx-2.7.0\res
+com.nate.app-core-runtime-2.2.0-49 C:\Users\Asus\.gradle\caches\8.12\transforms\f35272bd16f27a48d8edc40d0765dd6f\transformed\core-runtime-2.2.0\res
+com.nate.app-jetified-media3-exoplayer-1.4.1-50 C:\Users\Asus\.gradle\caches\8.12\transforms\f64ea5f6ffdef755825dbb91ec012713\transformed\jetified-media3-exoplayer-1.4.1\res
+com.nate.app-jetified-foundation-layout-release-51 C:\Users\Asus\.gradle\caches\8.12\transforms\f97b39152a9f232b8fddf416ee9a612a\transformed\jetified-foundation-layout-release\res
+com.nate.app-jetified-savedstate-1.2.1-52 C:\Users\Asus\.gradle\caches\8.12\transforms\fbe8ed309020acad90eef19c9499c9af\transformed\jetified-savedstate-1.2.1\res
+com.nate.app-pngs-53 C:\Users\Asus\Downloads\onstream 2.0\app\build\generated\res\pngs\release
+com.nate.app-resValues-54 C:\Users\Asus\Downloads\onstream 2.0\app\build\generated\res\resValues\release
+com.nate.app-packageReleaseResources-55 C:\Users\Asus\Downloads\onstream 2.0\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
+com.nate.app-packageReleaseResources-56 C:\Users\Asus\Downloads\onstream 2.0\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
+com.nate.app-merged-not-compiled-resources-57 C:\Users\Asus\Downloads\onstream 2.0\app\build\intermediates\merged-not-compiled-resources\release
+com.nate.app-merged_res-58 C:\Users\Asus\Downloads\onstream 2.0\app\build\intermediates\merged_res\release
+com.nate.app-main-59 C:\Users\Asus\Downloads\onstream 2.0\app\src\main\res
+com.nate.app-release-60 C:\Users\Asus\Downloads\onstream 2.0\app\src\release\res
